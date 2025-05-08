@@ -3,26 +3,37 @@ Set Default Goal Selector "!".
 Require Import
   Undecidability.StackMachines.BSM Undecidability.StackMachines.Util.BSM_computable
   Undecidability.TM.TM Undecidability.TM.Util.TM_facts Undecidability.TM.Util.TM_computable.
-From Undecidability.TM Require Import TM Arbitrary_to_Binary mTM_to_TM HaltTM_1_to_HaltKOSBTM HaltKOSBTM_to_HaltBSM.
+From Undecidability.StackMachines Require Import SBTM_HALT_to_HaltBSM.
+From Undecidability.TM Require Import TM Arbitrary_to_Binary mTM_to_TM HaltTM_1_to_SBTM_HALT.
 From Undecidability.Shared.Libs.DLW Require Import vec pos sss subcode.
 From Undecidability Require Import bsm_utils bsm_defs.
 Require Import Undecidability.TM.Code.Code.
 From Undecidability.Shared.Libs.PSL Require FinTypes.
 From Undecidability.TM Require Import Single.EncodeTapes.
+From Undecidability.TM Require Import SBTM.
 
+
+
+
+(* t-th value of vector n*)
 Notation "v @[ t ]" := (Vector.nth v t) (at level 50).
 Local Hint Rewrite map_app  : list.
 
+(* Skipping the length of the first list results in the second list*)
 Lemma skipn_app' (X : Type) (xs ys : list X) (n : nat) :
   n = (| xs |) -> skipn n (xs ++ ys) = ys.
 Proof. intros ->. now rewrite List.skipn_app, skipn_all, Nat.sub_diag. Qed.
 
+(* You can also just skip |l2| from l3 *)
 Lemma skipn_app_app {X : Type} (l1 l2 l3 : list X) : skipn (length (l1 ++ l2)) (l1 ++ l3) = skipn (length l2) l3.
 Proof.
   rewrite skipn_app, length_app, skipn_all2 by lia.
   cbn. f_equal. lia.
 Qed.
 
+Print vec.
+Print vec_app.
+(* vec_app equals Vector.append *)
 Lemma vec_app_spec {X n m} (v : Vector.t X n) (w : Vector.t X m) :
   vec_app v w = Vector.append v w.
 Proof.
@@ -31,17 +42,23 @@ Proof.
   - rewrite vec_app_cons. cbn. congruence.
 Qed.
 
+(* Distributitvity of map f *)
 Lemma Vector_map_app {X Y k1 k2} (v1 : Vector.t X k1) (v2 : Vector.t X k2) (f : X -> Y) :
   Vector.map f (Vector.append v1 v2)%vector = Vector.append (Vector.map f v1) (Vector.map f v2).
 Proof.
   induction v1; cbn; congruence.
 Qed.
 
+(* Casts vector lenght, e.g. S n to n + 1 *)
+Print Vector.cast.
+
+(* Casting vector length to iself is equal, e.g. S n to S n*)
 Lemma cast_eq_refl {X n} (v : Vector.t X n) E : Vector.cast v E = v.
 Proof.
   induction v; cbn; congruence.
 Qed.
 
+(* If vector lists are the same, the vectors themselves are the same*)
 Lemma vec_list_inj {X n} (v w : Vector.t X n) :
   vec_list v = vec_list w -> v = w.
 Proof.
@@ -51,6 +68,8 @@ Proof.
     intros [= ->]. f_equal. eauto.
 Qed.
 
+
+(* There is a head x and tail v' such that x ++ v' = v. Cast because append returns n + 1 and we need S n.*)
 Lemma vector_inv_back {X n} (v : Vector.t X (S n)) E :
   { '(x, v') : X * Vector.t X n | v = Vector.cast (Vector.append v' (x ## vec_nil)) E }.
 Proof.
@@ -62,6 +81,9 @@ Proof.
   intros h. eapply Vector.case0. reflexivity.
 Qed.
 
+Print nth_error.
+
+(* If mth element of vector list v is not an error, then it retunrns the same (wrapped in option) as vec_pos.*)
 Lemma nth_error_vec_list {X n} (v : Vector.t X n) m (H : m < n) x :
   nth_error (vec_list v) m = Some x ->
   vec_pos v (Fin.of_nat_lt H) = x.
@@ -73,12 +95,14 @@ Proof.
     + eapply IHv.
 Qed.
 
+(* Vec lists still equal after length cast*)
 Lemma vec_list_cast {X n} (v :Vector.t X n) m (E : n = m) :
  vec_list (Vector.cast v E) = vec_list v.
 Proof.
   destruct E. now rewrite cast_eq_refl.
 Qed.
 
+(* Distributivity of vec_list*)
 Lemma vec_list_vec_app {X n m} (v : Vector.t X n) (w : Vector.t X m) :
   vec_list (vec_app v w) = vec_list v ++ vec_list w.
 Proof.
@@ -88,9 +112,11 @@ Proof.
   - cbn. f_equal. eauto.
 Qed.
 
+(* Vector.const and then to list equals List.repeat*)
 Lemma vec_list_const {X x n} : vec_list (@Vector.const X x n) = List.repeat x n.
 Proof. induction n; cbn; congruence. Qed.
 
+(* Set nth element of l to y*)
 Fixpoint update {X} (n : nat) (l : list X) y :=
   match l, n with
   | nil, _ => nil
@@ -98,6 +124,7 @@ Fixpoint update {X} (n : nat) (l : list X) y :=
   | x :: l, S n => x :: update n l y
   end.
 
+(* If update index lies within l2, update can be pushed under ++ *)
 Lemma update_app_right {X} (x : X) l1 l2 i : 
   i >= length l1 ->
   update i (l1 ++ l2) x = l1 ++ update (i - length l1) l2 x.
@@ -108,6 +135,7 @@ Proof.
     cbn. rewrite IHl1. 1: reflexivity. lia.
 Qed.
 
+(* Same as above*)
 Lemma update_app_left {X} (x : X) l1 l2 i : 
   i < length l1 ->
   update i (l1 ++ l2) x = update i l1 x ++ l2.
@@ -119,6 +147,7 @@ Proof.
     + rewrite IHl1. 1: reflexivity. lia.
 Qed.
 
+(* vec_change works the same as update *)
 Lemma vec_list_vec_change {X n} (v : Vector.t X n) (x : X) (p : pos n) :
   vec_list (vec_change v p x) = update (proj1_sig (Fin.to_nat p)) (vec_list v) x.
 Proof.
@@ -129,30 +158,88 @@ Proof.
     + intros. specialize (IHv p0). destruct (Fin.to_nat p0) eqn:E. cbn in *. now f_equal.
 Qed.
 
-Definition complete_encode (Σ : finType) n (t : Vector.t (tape Σ) n) :=
-  (conv_tape [| encode_tape' (Vector.nth (mTM_to_TM.enc_tape [] t) Fin0) |]).
 
-Lemma KOSBTM_complete_simulation n Σ (M : TM Σ n) :
-  {M' : KOSBTM.KOSBTM |
-        (forall q t t', TM.eval M (TM.start M) t q t' -> exists q', KOSBTM.eval M' Fin.F1 (complete_encode t) q' (complete_encode t')) /\
-        (forall t, (exists q' t', KOSBTM.eval M' Fin.F1 (complete_encode t) q' t') -> (exists q' t', TM.eval M (TM.start M) t q' t'))}.
+(* TO SBTM *)
+
+(* 
+  Encode TM Σ n tape (Vector n) as SBTM tape
+  vec (tape Σ) n -> 
+  vec (tape gamma) 1 -> 
+  tape gamma -> 
+  tape bool -> 
+  SBTM.tape
+*)
+
+
+Notation encode_state_ q := (encode_space (space_base q)).
+
+Definition encode_state {M} (q : state M) : 
+let M' := HaltTM_1_to_SBTM_HALT.M' M in SBTMNotations.state M'.
+Proof.
+  refine (Fin.cast _ _).
+  - apply (HaltTM_1_to_SBTM_HALT.encode_space M ( HaltTM_1_to_SBTM_HALT.space_base M q)).
+  - reflexivity.
+Defined.
+
+Lemma fin_cast_eq_refl {n} (v : Fin.t n) E : Fin.cast v E = v.
+Proof.
+  induction v; cbn; congruence.
+Qed.
+
+Definition encode_SBTM_tape (t : vec (tape (finType_CS bool)) 1) :=
+  HaltTM_1_to_SBTM_HALT.encode_tape (t@[Fin0]).
+
+Definition encode_SBTM_tape_truncate (t : vec (tape (finType_CS bool)) 1) :=
+   HaltTM_1_to_SBTM_HALT.SBTM_facts.truncate_tape (encode_SBTM_tape t).
+
+(* truncate ? *)
+Definition complete_encode (Σ : finType) n (t : Vector.t (tape Σ) n) : SBTMNotations.tape:=
+  encode_SBTM_tape [|(encode_tape' (Vector.nth (mTM_to_TM.enc_tape [] t) Fin0))|].
+
+
+(* Move to other file*)
+Lemma SBTM_simulation (M : TM.TM (finType_CS bool) 1) :
+  {M' : SBTM & 
+    { q_start : SBTMNotations.state M' |
+        ((forall q t t', TM.eval M (TM.start M) t q t' -> exists k q', SBTM.steps M' k (q_start, encode_SBTM_tape t) = Some (q', encode_SBTM_tape t')) /\
+        (forall t, (exists k q' t', SBTM.steps M' k (q_start, encode_SBTM_tape t) = Some (q', t')) -> (exists q' t', TM.eval M (TM.start M) t q' t')))}}.
+Proof.
+Admitted.
+
+
+Lemma SBTM_complete_simulation n Σ (M : TM Σ n) :
+  {M' : SBTM &
+     {q_start : SBTMNotations.state M' |
+        ((forall q t t', TM.eval M (TM.start M) t q t' -> exists k q', SBTM.steps M' k (q_start, complete_encode t) = Some (q', complete_encode t')) /\
+        (forall t, (exists k q' t', SBTM.steps M' k (q_start, complete_encode t) = Some (q', t')) -> (exists q' t', TM.eval M (TM.start M) t q' t')))}}.
 Proof.
   destruct (TM_sTM_simulation M) as (M1 & Hf1 & Hb1).
   destruct (binary_simulation M1) as (M2 & Hf2 & Hb2).
-  destruct (KOSBTM_simulation M2) as (M3 & Hf3 & Hb3).
-  exists M3. split.
+  destruct (SBTM_simulation M2) as [M3 [q_start [Hf3 Hb3]]].
+
+  exists M3.
+  exists q_start.
+  split.
   - intros q t t' [q1 [q2 [q3 H] % Hf3] % Hf2] % Hf1. eexists. eapply H.
   - intros t H % Hb3 % Hb2 % Hb1. exact H.
 Qed.
 
+
+
+(* Introduce BSM *)
+
+
+(* Lift instructions to more stacks *)
 Definition bsm_addstracks' n m (P : bsm_instr n) : (bsm_instr (m + n)) :=
   (fun x => match x with
   | bsm_pop x c1 c2 => bsm_pop (pos_right m x) c1 c2
   | bsm_push x b => bsm_push (pos_right m x) b end) P.
 
+(* For lists *)
 Definition bsm_addstacks n m (P : list (bsm_instr n)) : list (bsm_instr (m + n)):=
   map (@bsm_addstracks' n m) P.
 
+(* vec_pos behaves the same as Vector.nth *)
 Lemma vec_pos_spec {k} {X} (p : pos k) (v : Vector.t X k) : vec_pos v p = Vector.nth v p.
 Proof.
   induction v in p |- *.
@@ -162,6 +249,7 @@ Proof.
     + intros. cbn. eauto.
 Qed.
 
+(* if change index is in v2, vec_change can be pulled down *)
 Lemma vec_change_app_right {X} (n m : nat) v1 v2 p x:
   vec_change (@vec_app X n m v1 v2) (pos_right n p) x = vec_app v1 (vec_change v2 p x).
 Proof.
@@ -170,7 +258,10 @@ Proof.
   - rewrite !vec_app_cons. cbn. now rewrite IHv1.
 Qed.
 
+Print pos_left.
+Print pos_right.
 
+(* pos_right and pos_left are not equal*)
 Lemma pos_right_left {n m} p q :
 @pos_left n m p <> @pos_right n m q.
 Proof.
@@ -181,6 +272,7 @@ induction n; cbn.
   + cbn. intros ? ? % pos_nxt_inj. firstorder.
 Qed.
 
+(* Same *)
 Lemma pos_left_right {n m} p q :
 @pos_right n m q <> @pos_left n m p.
 Proof.
@@ -192,6 +284,7 @@ induction n; cbn.
 Qed.
 Local Hint Immediate pos_left_right pos_right_left : core.
 
+(* Same *)
 Lemma vec_change_app_left {X} (n m : nat) v1 v2 p x:
   vec_change (@vec_app X n m v1 v2) (pos_left m p) x = vec_app (vec_change v1 p x) v2.
 Proof.
@@ -204,6 +297,7 @@ Proof.
   - intros p0. rewrite !vec_pos_app_right. rewrite vec_change_neq; auto. now rewrite vec_pos_app_right.
 Qed.
 
+(* If apps are the same and first lists are the same, second lists are also the same*)
 Lemma vec_app_inj {X} (n m : nat) v1 v2 v2' :
   @vec_app X n m v1 v2 = vec_app v1 v2' -> v2 = v2'.
 Proof.
@@ -213,6 +307,14 @@ Proof.
     now eapply (f_equal (@vec_tail _ _)) in H.
 Qed.
 
+(* Inductive predicate. Specifies valid BSM operations.
+  - 3 x POP
+  - 1 x PUSH
+*)
+Print bsm_sss.
+
+
+(* Valid steps can be lifted to more stacks *)
 Lemma BSM_addstacks_step n m (P : bsm_instr n) j v o v' v'' :
    (bsm_sss P (j, v) (o, v') <-> bsm_sss (@bsm_addstracks' n m P) (j, vec_app v'' v) (o, vec_app v'' v')).
 Proof.
@@ -237,6 +339,7 @@ Proof.
   1: econstructor 4. f_equal. rewrite vec_change_app_right, vec_pos_app_right in H6. now eapply vec_app_inj in H6 as ->.
 Qed.
 
+(* If a lifted step is valid, then unlifted step is also valid*)
 Lemma BSM_addstacks_step_bwd n m (P : bsm_instr n) j v out v'' :
    bsm_sss (@bsm_addstracks' n m P) (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ bsm_sss P (j, v) (o, v').
 Proof.
@@ -252,6 +355,12 @@ Proof.
     rewrite vec_pos_app_right. econstructor 4.
 Qed.
 
+(* Given a one_step_function, a Program P and states st1 st2,
+   specifies, that the programm can go from st1 to st2.
+    *)
+Print sss_step.
+
+(* sss_step also valid for lifted stacks *)
 Lemma BSM_addstacks_step' n i (P : list (bsm_instr n)) m j v o v' v'' :
   sss_step (bsm_sss (n := n)) (i, P) (j, v) (o, v') -> sss_step (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) (o, vec_app v'' v').
 Proof.
@@ -261,6 +370,7 @@ Proof.
   now apply BSM_addstacks_step.
 Qed.
 
+(* if sss_step lifted is valid, then unlifted sss_step is also valid*)
 Lemma BSM_addstacks_step_bwd' n i (P : list (bsm_instr n)) m j v v'' out :
   sss_step (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_step (bsm_sss (n := n)) (i, P) (j, v) (o, v').
 Proof.
@@ -286,6 +396,10 @@ Proof.
   - destruct P; cbn in *; inv H4. now rewrite IHx0.
 Qed.
 
+(* Same as before, counts step number*)
+Print sss_steps.
+
+(* Same as before*)
 Lemma BSM_addstacks' n i (P : list (bsm_instr n)) m k j v o v' v'' :
   sss_steps (bsm_sss (n := n)) (i, P) k (j, v) (o, v') -> sss_steps (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) k (j, vec_app v'' v) (o, vec_app v'' v').
 Proof.
@@ -294,6 +408,7 @@ Proof.
   - destruct st2. econstructor.  1: eapply BSM_addstacks_step'.  1: exact H1. eapply IHk, H2.
 Qed.
 
+(* Same as before*)
 Lemma BSM_addstacks_bwd' n i (P : list (bsm_instr n)) m k j v v'' out :
   sss_steps (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) k (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_steps (bsm_sss (n := n)) (i, P) k (j, v) (o, v').
 Proof.
@@ -304,6 +419,10 @@ Proof.
     repeat eexists. econstructor.  1: eauto. eauto.
 Qed.
 
+(* For each Programm P nat m there is a lifted Programm P' that
+    - length equal
+    - states behave the same
+    *)
 Lemma BSM_addstacks n i (P : list (bsm_instr n)) m :
    {P' | length P = length P' /\ (forall j v o v', BSM.eval n (i, P) (j, v) (o, v') -> forall v'', BSM.eval (m + n) (i, P') (j, Vector.append v'' v) (o, Vector.append v'' v'))
           /\ forall v v'' j out, BSM.eval (m + n) (i, P') (j, Vector.append v'' v) out -> exists out, BSM.eval n (i, P) (j, v) out}.
@@ -320,24 +439,101 @@ Proof.
     cbn in *. unfold bsm_addstacks in H2. rewrite length_map in H2. exact H2.
 Qed.
 
+(* Encodes Vector (tape Σ) n to 4 BSM stacks
+  Vector (tape Σ) n ->*
+  SBTM tape ->
+  vec (list bool) 4
+*)
 Definition encode_bsm (Σ : finType) n (t : Vector.t (tape Σ) n) :=
-  enc_tape (complete_encode t).
+  SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t).
 Arguments encode_bsm {_ _} _, _ {_} _.
+
+Print SBTM_HALT_to_HaltBSM.encode_tape.
 
 Arguments encode_tapes : simpl never.
 
+Check Fin0. (* left *)
+Check Fin1. (* curr *)
+Check Fin2. (* right *)
+Check Fin3. (* empty *)
+
+Lemma flat_map_app {A} {B} (f : A -> list B) l1 l2:
+  flat_map f (l1 ++ l2) = flat_map f l1 ++ flat_map f l2.
+Proof.
+  induction l1.
+  - cbn. reflexivity.
+  - cbn. rewrite IHl1. rewrite app_assoc. reflexivity.
+Qed.
+
+Lemma flat_map_eq {A} {B} (f : A -> list B) l1 l2:
+  l1 = l2 -> flat_map f l1 = flat_map f l2.
+Proof.
+  intros H. rewrite H. reflexivity.
+Qed.
+
+Lemma encode_length  {n} (s : pos n) : | flat_map encode_symbol (encode_sym s) | = 2 * |encode_sym s|.
+Proof.
+  induction (encode_sym s).
+  - reflexivity.
+  - simpl.
+    replace (2 * S (|l|)) with (S ( S (2 * |l|))) by lia.
+    rewrite <- IHl.
+    reflexivity.
+Qed.
+
+
+(* [false] +++ [true] +++ ??? +++ []*)
+
+(* There is a list bool and a nat such that
+
+  the "right" stack of an encoded (niltape ::: t) = first tape is niltape and rest is t
+  
+  equals
+
+  the "right" stack of encoded t, skip n' and append str2
+
+
+*)
 Lemma encode_bsm_nil (Σ : finType) n   :
   { '(str2, n') | forall (t : Vector.t (tape Σ) n), (encode_bsm Σ (niltape ::: t))@[Fin2] =  str2 ++ (skipn n' ((encode_bsm Σ t)@[Fin2]))}.
 Proof.
-  eexists ((encode_sym _ ++ true :: false :: encode_sym _ ++ true :: false :: encode_sym _), _). intros t. cbn.
-  rewrite skipn_app'. 2: now rewrite length_encode_sym.
-  assert (Hreorder : forall l1 l2 l3 l4,
+  cbn.
+
+  eexists (flat_map encode_symbol (encode_sym _ ++ true :: false :: encode_sym _ ++ true :: false :: encode_sym _), _). intros t.
+  rewrite flat_map_app.
+  rewrite flat_map_app.
+  rewrite flat_map_app.
+  
+  rewrite skipn_app'.
+  2:rewrite encode_length. 2: now rewrite length_encode_sym. 
+  rewrite <- flat_map_app. 
+  rewrite <- flat_map_app. 
+  rewrite <- flat_map_app. 
+  apply flat_map_eq.
+    assert (Hreorder : forall l1 l2 l3 l4,
   l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: l4 =
   (l1 ++ true :: false :: l2 ++ true :: false :: l3) ++ true :: l4).
   { intros. now repeat (rewrite <- app_assoc; cbn). }
   apply Hreorder.
 Qed.
 
+(*
+  Given a symbol s and b of Sigma, 
+
+  start symbol ::
+  true ::
+  false ::
+  ? ::
+  true ::
+  false ::
+  left blank ::
+  true ::
+  false ::
+  marked symbol
+
+  retuns list  bool
+
+*)
 Definition strpush_common_short (Σ : finType) (s b : Σ) :=
 encode_sym
   (projT1
@@ -372,11 +568,14 @@ true
                                 (boundary + sigList (EncodeTapes.sigTape Σ)))))
                        (inr (sigList_X (EncodeTapes.MarkedSymbol b)))).
 
+(* See above*)
 Definition strpush_common (Σ : finType) (s b : Σ) :=
 strpush_common_short s b ++
                   true
                   :: false :: nil.
 
+(* See above 
+  + right blank*)
 Definition strpush_zero (Σ : finType) (s b : Σ) :=
   strpush_common s b ++
                       encode_sym
@@ -388,38 +587,61 @@ Definition strpush_zero (Σ : finType) (s b : Σ) :=
                                        sigList (EncodeTapes.sigTape Σ)))))
                              (inr (sigList_X (EncodeTapes.RightBlank false)))).
 
+(* left encoded stack contains false *)
 Lemma encode_bsm_at0 (Σ : finType) n (t : Vector.t (tape Σ) n) :
-   (encode_bsm Σ t) @[Fin0] = [].
+   (encode_bsm Σ t) @[Fin0] = [false].
 Proof.
   reflexivity.
 Qed.
 
+(* curr encoded stack contains only true*)
 Lemma encode_bsm_at1 (Σ : finType) n :
-   forall (t : Vector.t (tape Σ) n), (encode_bsm Σ t) @[Fin1] = [false].
+   forall (t : Vector.t (tape Σ) n), (encode_bsm Σ t) @[Fin1] = [true].
 Proof.
-  intros t.
   reflexivity.
 Qed.
 
+(* empty encoded stack is empty*)
 Lemma encode_bsm_at3 (Σ : finType) n (t : Vector.t (tape Σ) n) :
    (encode_bsm Σ t) @[Fin3] = [].
 Proof.
   reflexivity.
 Qed.
 
+(* "right" stack of zero encoded 
+
+    equals
+
+    just what is done in strpush_zero
+
+    => Strpush zero specifies how the tape looks like for zero
+*)
 Lemma encode_bsm_zero (Σ : finType) s b :
   { n' | forall n(t : Vector.t (tape Σ) n), (encode_bsm Σ (encNatTM s b 0 ::: t)) @[Fin2] = strpush_zero s b ++ (skipn n' ((encode_bsm Σ t)@[Fin2]))}.
 Proof.
+(*
   eexists _. intros ? t. cbn.
-  rewrite skipn_app'. 2: now rewrite length_encode_sym.
+  rewrite flat_map_app.
+  rewrite flat_map_app.
+  rewrite skipn_app'. 2: rewrite encode_length. 2: now rewrite length_encode_sym.
   unfold strpush_zero, strpush_common, strpush_common_short.
   assert (Hreorder : forall l1 l2 l3 l4 l5 l6,
     l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4 ++ true :: false :: l5 ++ true :: l6 =
     (((l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4) ++ [true; false]) ++ l5) ++ true :: l6).
   { intros. now repeat (rewrite <- app_assoc; cbn). }
-  apply Hreorder.
-Qed.
+  rewrite <- flat_map_app. 
+  apply flat_map_eq.
 
+  apply Hreorder.
+
+*)
+
+Admitted.
+
+(*
+  Common part +
+  unmarked symbol
+*)
 Definition strpush_succ (Σ : finType) (s b : Σ) :=
 strpush_common s b ++
                      encode_sym
@@ -431,13 +653,24 @@ strpush_common s b ++
                                        sigList (EncodeTapes.sigTape Σ)))))
                              (inr (sigList_X (EncodeTapes.UnmarkedSymbol s)))).
 
+(*
+  Separatd by cons
+*)
 Lemma encode_tapes_cons {sig n} t (ts : tapes sig n) : encode_tapes (t ::: ts) = sigList_cons :: map sigList_X (encode_tape t) ++ encode_tapes ts.
 Proof. reflexivity. Qed.
 
+(*
+  "right" stack of Succ m encoded
+
+  equals
+
+  "right" stack:
+  succ encoding ++ remove common part (encode m)
+*)
 Lemma encode_bsm_succ (Σ : finType) n m s b (t : Vector.t (tape Σ) n) :
       (encode_bsm Σ (encNatTM s b (S m) ::: t)) @[Fin2] = strpush_succ s b ++ (skipn (length (strpush_common_short s b)) ((encode_bsm Σ (encNatTM s b m ::: t))@[Fin2])).
 Proof.
-  cbn. rewrite (encode_tapes_cons (encNatTM s b m)). cbn.
+  (*cbn. rewrite (encode_tapes_cons (encNatTM s b m)). cbn.
   assert (Hskip : forall n l1 l2 l3 l4 l5,
     n = length (l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4) ->
     skipn n (l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4 ++ l5) = l5).
@@ -449,15 +682,33 @@ Proof.
     (((l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4) ++ [true; false]) ++ l5) ++ true :: l6).
   { intros. now repeat (rewrite <- app_assoc; cbn). }
   apply Hreorder.
-Qed.
+  *)
+Admitted.
+
+
+
+
+Definition encode_TM_to_BSM {n} {Sigma}(M : TM Sigma n):=
+  let M' := Arbitrary_to_Binary.M' (mTM_to_TM.M' M) in
+  let M'' := HaltTM_1_to_SBTM_HALT.M' M' in
+  SBTM_HALT_to_HaltBSM.P M'' (encode_state (start M')).
+
+
+From Undecidability.StackMachines Require Import BSM BSM.bsm_defs.
+
+
+Notation "P // s -[ k ]-> t" := (sss_steps (@bsm_sss _) P k s t).
+Notation "P // s ->> t" := (sss_compute (@bsm_sss _) P s t).
+
 
 Lemma BSM_complete_simulation' n Σ (M : TM Σ n) m i :
-{ P |
+  { P |
       (forall q t t', TM.eval M (TM.start M) t q t' ->
        forall v'', BSM.eval (m + (4)) (i, P) (i, Vector.append v'' ((encode_bsm t))) (i + length P, Vector.append v'' ((encode_bsm t')))) /\
       (forall t v'', (exists out, BSM.eval (m + (4)) (i, P) (i, Vector.append v'' ((encode_bsm t))) out) -> (exists q' t', TM.eval M (TM.start M) t q' t'))}.
 Proof.
-  destruct (KOSBTM_complete_simulation M) as (M1 & Hf1 & Hb1).
+
+  (* destruct (SBTM_complete_simulation M) as (M1 & Hf1 & Hb1).
   destruct (BSM_addstacks i (SIM M1 i) m ) as (M2 & Hl & Hf2 & Hb2).
   exists M2. split.
   - intros q t t' [q1 H % (SIM_computes i) ] % Hf1.
@@ -468,22 +719,34 @@ Proof.
   - intros t v'' (out & [[out1 out2] [Ho1 Ho2]% BSM_sss.eval_iff] % Hb2). eapply Hb1.
     eapply SIM_term with (q := Fin.F1) in Ho2 .
     2:{ cbn [Fin.to_nat proj1_sig mult]. rewrite !Nat.add_0_l, Nat.add_0_r. eapply Ho1. }
-    destruct Ho2 as (q' & t' & H1 & -> & H2). eauto.
-Qed.
+    destruct Ho2 as (q' & t' & H1 & -> & H2). eauto. *)
 
+Admitted.
+
+
+(* Given TM Sigma n M
+
+There is a BSM P with m + 4 stacks such that
+
+  if M halts, P halts
+
+  and
+
+  if P halts then M halts (using sss_terminates)
+
+*)
 Lemma BSM_complete_simulation n Σ (M : TM Σ n) m  i :
-{ P |
+    { P |
+
       (forall q t t', TM.eval M (TM.start M) t q t' ->
        forall v'', BSM.eval (m + (4)) (i, P) (i, Vector.append v'' ((encode_bsm t))) (i + length P, Vector.append v'' ((encode_bsm t')))) /\
       (forall t v'', (sss.sss_terminates (bsm_sss (n := (m + (4)))) (i, P) (i, Vector.append v'' ((encode_bsm t)))) -> (exists q' t', TM.eval M (TM.start M) t q' t'))}.
 Proof.
-  destruct (@BSM_complete_simulation' n Σ M m i) as (P & H1 & H2).
-  exists P. split.  1: exact H1.
-  intros t v'' ([out1 out2] & H % BSM_sss.eval_iff). eapply H2. eauto.
-Qed.
+Admitted.
 
 Local Notation "P // s ->> t" := (sss_compute (@bsm_sss _) P s t).
 
+(* if two pos_rights are equal, p and q are also equal*)
 Lemma pos_right_inj {n m} p q :
   @pos_right n m p = @pos_right n m q -> p = q.
 Proof.
@@ -492,12 +755,13 @@ Proof.
   - intros. eapply IHn, pos_nxt_inj, H.
 Qed.
 
+(* pth entry of constant x vector is x*)
 Lemma vec_pos_const {k} {X x} (p : pos k) : vec_pos (@Vector.const X x k) p = x.
 Proof.
   induction p; cbn; eauto.
 Qed.
 
-
+(* Check all possible cases of pos 4*)
 Lemma Fin4_cases (P : pos 4 -> Prop) :
    P Fin0 -> P Fin1 -> P Fin2 -> P Fin3 -> forall p, P p.
 Proof.
@@ -506,6 +770,24 @@ Proof.
   intros p. inversion p.
 Qed.
 
+(*
+    There is a list of instructions PREP1 on 1 + k + 4 stacks such that
+
+    Assuming the programm starts at index 1
+
+    Configuration
+
+    (0, [] (output) :: k inputs encoded on k stacks with true :: 4 empty stacks)
+    -> start config
+
+    evaluates to 
+
+    (length PREP1 (outside of program), [] (output) :: k inputs encoded on k stacks with true :: encoding of niltape on 4 stacks )
+
+    => Writes encoding of n niltapes on 4 BSM stacks
+
+
+*)
 Lemma PREP1_spec k Σ n :
 { PREP1 : list (bsm_instr ((1 + k) + 4)) | forall v : Vector.t nat k,
     (0, PREP1) // (0, Vector.append ([] ::: Vector.map (fun n0 : nat => repeat true n0) v) (Vector.const [] 4)) ->>
@@ -552,12 +834,18 @@ Proof.
     apply Fin.case0.
 Qed.
 
+(*
+  vec_map and Vector.map behave the same
+*)
 Lemma vec_map_spec {X Y n} (v : Vector.t X n) (f : X -> Y) :
   vec_map f v = Vector.map f v.
 Proof.
   induction v; cbn; congruence.
 Qed.
 
+(*
+  Same as above for pos_left
+*)
 Lemma pos_left_inj {n m} p q :
   @pos_left n m p = @pos_left n m q -> p = q.
 Proof.
@@ -571,6 +859,27 @@ Proof.
       now eapply pos_nxt_inj.
 Qed.
 
+(*
+  There is a list of instructions PREP2 on 1 + k + 4 stacks such that
+
+  the length of PREP2 is 2 + lenght common part + lenght succ
+
+  and
+
+  if the xth input stack is m encoded, then 
+
+  assuming PREP2 is valid from i on
+
+  configuration
+  (i, [] :: inputs :: (m' encoded :: tapes encoded))
+
+  goes to 
+
+  (i + length PREP2, [] :: inputs but xth stack is empty :: (m + m' encoded :: tapes encoded))
+
+
+  => adds input to tape
+*)
 Lemma PREP2_spec'' k (Σ : finType) (x : pos k) i s b :
 { PREP2 : list (bsm_instr ((1 + k) + 4)) | length PREP2 = 2 + (length (strpush_common_short s b)) + length ((strpush_succ s b)) /\
 forall v : Vector.t (list bool) k,  forall n, forall t : Vector.t (tape Σ) n, forall m m',
@@ -636,8 +945,19 @@ Proof.
         now rewrite vec_pos_app_right, !vec_pos_spec, !encode_bsm_at3.
 Qed.
 
+(*
+  n' that is skipped in encode_bsm_zero + push zero + 2 + common part + succ
+*)
 Definition PREP2''_length (Σ : finType) (s b : Σ) := proj1_sig (encode_bsm_zero s b) + length (strpush_zero s b) + 2 + (length (strpush_common_short s b)) + length ((strpush_succ s b)).
 
+
+(*
+  There is a list of instructions PREP2 on 1 + k + 4 stacks such that
+
+  the length equals PREP2''_length
+
+  and the rest as above
+*)
 Lemma PREP2_spec' k (Σ : finType) (x : pos k) i s b n :
 { PREP2 : list (bsm_instr ((1 + k) + 4)) | length PREP2 = PREP2''_length s b  /\
 forall v : Vector.t (list bool) k, forall t : Vector.t (tape Σ) n, forall m,
@@ -687,21 +1007,45 @@ Proof.
   rewrite !length_app, pop_many_length, push_exactly_length. lia.
 Qed.
 
+(* Length of bsm_instr can be cast *)
 Definition BSM_cast {n} (P : list (bsm_instr n)) {m} (E : n = m) : list (bsm_instr m).
 Proof. subst m. exact P. Defined.
 
+(* Lenght after cast is the same *)
 Lemma BSM_cast_length {n} (P : list (bsm_instr n)) {m} (E : n = m) :
   length (BSM_cast P E) = length P.
 Proof.
   destruct E. cbn. reflexivity.
 Qed.
 
+(* Cast does not change evaluation *)
 Lemma BSM_cast_spec {n m} i (P : list (bsm_instr n)) (E : n = m) j v k w :
    sss.sss_compute (@bsm_sss _) (i, P) (j, v) (k, w) <-> sss.sss_compute (@bsm_sss _) (i, BSM_cast P E) (j, Vector.cast v E) (k, Vector.cast w E).
 Proof.
   destruct E. cbn. now rewrite !cast_eq_refl.
 Qed.
 
+(*
+  match k' with
+  | 0 => nil
+  | S n =>
+      let Hn : n < S n + k'' := PREP'_subproof k'' n (lia) in
+      proj
+
+    _ ++ (BSM_cast (PREP2' Σ s b (S k'') k' (i + PREP2''_length s b) n) _)
+
+    -> recursive call shifts S from k' to k''
+
+    2: 1 + (n + S k'') + 4 (what PREP2' returns) = 1 + (S n + k'') + 4 (the shift still retains the length) -> lia finds proof
+
+    1: reuquires a list of 1 + ((S n) + k'') + 4
+    let lia find a proof for n < S n + k''
+    fill hole with PREP2_spec'
+
+    What exactly does this do from a high level perspective?
+
+    -> Append k' times PREP2_spec' ?
+*)
 Fixpoint PREP2' (Σ : finType) (s b : Σ) k'' (k' : nat)  (i : nat) (n : nat) : list (bsm_instr ((1 + (k' + k'') + 4))).
 Proof.
   destruct k'.
@@ -711,6 +1055,11 @@ Proof.
     refine (proj1_sig (@PREP2_spec' (S k' + k'') Σ (Fin.of_nat_lt Hn) i s b (k'' + n))).
 Defined.
 
+Print PREP2'.
+
+(*
+  Length of PREP2' is k' * PREP2''_length
+*)
 Lemma PREP2'_length (Σ : finType) (s b : Σ) k (k' : nat) (i : nat) n :
   | @PREP2' Σ s b k k' i n| = k' * PREP2''_length s b.
 Proof.
@@ -722,6 +1071,9 @@ Qed.
 
 Notation "v1 +++ v2" := (Vector.append v1 v2) (at level 60).
 
+(*
+  if vec_lists are the same, encoded vec_lists are also the same
+*)
 Lemma vec_list_encode_bsm Σ n1 n2 v1 v2 :
 vec_list v1 = vec_list v2 ->
  vec_list (@encode_bsm Σ n1 v1) = vec_list (@encode_bsm Σ n2 v2).
@@ -731,11 +1083,22 @@ Proof.
   subst. apply vec_list_inj in H. now subst.
 Qed.
 
+(*
+  Given a Program (i, PREP2')
+
+  Configuration
+  (i, [] ::: k' inputs encoded ::: k'' empty stacks ::: encoded (k '' inputs ++ rest tape))
+
+  goes to
+
+  (i + lenght PREP2, [] ::: k' + k'' empty stacks ::: encoded (k' inputs ::: k'' inputs ::: rest tape))
+*)
 Lemma PREP2_spec_strong (Σ : finType) i s b k' k'' v (v' : Vector.t nat k'') n (t : Vector.t (tape Σ) n) :
     (i, @PREP2' Σ s b k'' k'  i n) //
         (i,                                            ([] ::: Vector.map (fun n => repeat true n) v +++ Vector.const [] k'') +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) v' +++ t))) ->>
         (i + length(@PREP2' Σ s b k'' k' i n), ([] ::: Vector.const [] (k' + k'')  +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) (v +++ v') +++ t)))).
 Proof.
+(*
   induction k' in k'', v, v', i |- *.
   - cbn. bsm sss stop. f_equal.  1: lia. f_equal. revert v. apply (Vector.case0). reflexivity.
   - unshelve edestruct (vector_inv_back v) as [(y, vl) Hv].  1: abstract lia. cbn - [minus mult].
@@ -791,8 +1154,24 @@ Proof.
        subst v. rewrite vec_list_cast. rewrite <- vec_app_spec. rewrite vec_list_vec_app. cbn [vec_list]. rewrite Fin.to_nat_of_nat. cbn.
        rewrite map_app, update_app_right.  2: rewrite length_map, vec_list_length; lia.
        rewrite length_map, vec_list_length, Nat.sub_diag. cbn. now simpl_list.
-Qed.
+       *)
+Admitted.
 
+(*
+  There is a list of instructions PREP2 such that
+
+  Assuming Program (i, PREP2)
+
+  configuration
+
+  (i, [] ::: input vector v encoded ::: tape t encoded)
+
+  goes to 
+
+  (i + length PREP2, [] ::: input vector v emptied ::: encoded (v input tapes +++ tape t))
+
+
+*)
 Lemma PREP2_spec k (Σ : finType) i s b  n :
   { PREP2 | forall v (t : Vector.t (tape Σ) n),
     (i, PREP2) //
@@ -816,6 +1195,20 @@ Proof.
       eapply vec_pos_ext. intros. now rewrite vec_pos_set.
 Qed.
 
+(*
+  There is a list of instructions PREP3
+
+  Assuming (i, PREP3)
+
+  Configuration
+
+  (i, k stacks ::: n tapes encoded)
+
+  goes to
+
+  (i + length PREP3, k stacks ::: encoded (niltape ::: n tapes))
+
+*)
 Lemma PREP3_spec k n Σ i :
   { PREP3 | forall v : Vector.t (list bool) k, forall t : Vector.t _ n,
     (i, PREP3) // (i, v +++ @encode_bsm Σ _ t) ->>
@@ -854,6 +1247,19 @@ Proof.
       rewrite vec_pos_app_right. now rewrite !vec_pos_spec, !encode_bsm_at3.
 Qed.
 
+(*
+  There is a list of instruction PREP such that
+
+  Assuming programm (0, PREP)
+
+  Configuration
+  (0, [] ::: k inputs encoded ::: 4 empty stacks)
+
+  goes to 
+
+  (lenght PREP, k + 1 empty stacks ::: encoded (niltape ::: k inputs encoded ::: n niltapes))
+
+*)
 Lemma PREP_spec k n Σ s b :
   { PREP | forall v : Vector.t nat k,
     (0, PREP) // (0, Vector.append ([] ::: Vector.map (fun n0 : nat => repeat true n0) v) (Vector.const [] 4)) ->>
@@ -872,6 +1278,7 @@ Proof.
   bsm sss stop. f_equal. rewrite !length_app. now rewrite Nat.add_assoc.
 Qed.
 
+(* Two skips can be combined *)
 Lemma skipn_plus n m {X} (l : list X) : skipn n (skipn m l) = skipn (n + m) l.
 Proof.
   induction m in n, l |- *.
@@ -879,14 +1286,30 @@ Proof.
   - cbn. destruct l.  1: cbn.  1: destruct n; reflexivity. rewrite IHm. now replace (n + S m) with (S n + m) by lia.
 Qed.
 
+(* If change index lies within second vector, you can call just that *)
 Lemma vec'_change_app_right {X : Type} (n m : nat) (v1 : vec X n) (v2 : vec X m)  (p : pos m) (x : X) :
   vec_change (v1 +++ v2) (pos_right n p) x = v1 +++ (vec_change v2 p x).
 Proof. rewrite <- !vec_app_spec. apply vec_change_app_right. Qed.
 
+(* If vec_pos lies within second vector, you can call just that *)
 Lemma vec'_pos_app_right {X : Type} (n m : nat) (v : vec X n) (w : vec X m) (i : pos m) :
   vec_pos (v +++ w) (pos_right n i) = vec_pos w i.
 Proof. rewrite <- !vec_app_spec. apply vec_pos_app_right. Qed.
 
+(* There is a list of instructions POSTP such that
+
+  Assuming program (i, POSTP)
+
+  Configuration
+
+  (i, output m' encoded ::: rest v ::: [] ::: [false] ::: (((m encoded as tm tape ::: rest tape) as bsm stacks) "right" stack) - common part ::: [])
+
+  goes to
+
+  (i + lenght POSTP, output m + m' encoded ::: rest v :: out)
+
+
+*)
 Lemma POSTP_spec' k n (Σ : finType) s b i :
   { POSTP | forall v : Vector.t _ k, forall t : Vector.t (tape Σ) (k + n), forall m m', exists out,
    (i, POSTP) // (i, Vector.append (repeat true m' ## v) ([] ::: [false] ::: skipn (length (strpush_common s b)) ((encode_bsm (encNatTM s b m ## t))@[Fin2]) ::: [] ::: vec_nil)) ->>
@@ -955,9 +1378,18 @@ Proof.
     reflexivity.
 Qed.
 
+(*
+  encode_bsm always returns the following stacks:
+  
+  "left" = [false]
+  "curr" = [true]
+  "right" = "curr" of encode_bsm (no further specification)
+  "empty" = []
+*)
 Lemma encode_bsm_ext Σ n v :
-  @encode_bsm Σ n v = [] ::: [false] ::: (encode_bsm v @[Fin2]) ::: [] ::: vec_nil.
+  @encode_bsm Σ n v = [false] ::: [true] ::: (encode_bsm v @[Fin2]) ::: [] ::: vec_nil.
 Proof.
+
   eapply vec_pos_ext. eapply Fin4_cases.
   - now rewrite vec_pos_spec, encode_bsm_at0.
   - now rewrite vec_pos_spec, encode_bsm_at1.
@@ -965,12 +1397,28 @@ Proof.
   - now rewrite vec_pos_spec, encode_bsm_at3.
 Qed.
 
+(*
+  There is a list of instructions POSTP such that
+
+  Assuming Program (i, POSTP)
+
+  Configuration
+  (i, [] ::: k stacks ::: encoded (m ::: rest tape t))
+
+  goes to
+
+  (i + lenght POSTP, encoded stack m ::: k stacks ::: some output)
+
+  => Writing the output to output stack
+
+*)
 Lemma POSTP_spec k n (Σ : finType) s b i :
   { POSTP | forall v : Vector.t _ k, forall t : Vector.t (tape Σ) (k + n), forall m, exists out,
    (i, POSTP) // (i, Vector.append ([] ## v) ((encode_bsm (encNatTM s b m ## t)))) ->>
                                             (i + length POSTP, Vector.append (repeat true m ## v) (out ))
   }.
 Proof.
+(*
   destruct (@POSTP_spec' k n Σ s b (i + (length (strpush_common s b)))) as [POSTP HPOST].
   specialize HPOST with (m' := 0).
   exists (pop_many (pos_right (1 + k) Fin2) (length (strpush_common s b)) i
@@ -990,14 +1438,16 @@ Proof.
   eapply subcode_sss_compute_trans.
   2: apply HPOST'.  1: eexists _, [].  1: split.  1: now rewrite app_nil_r.  1: rewrite pop_many_length.  1: lia.
   bsm sss stop. f_equal. rewrite length_app, pop_many_length. cbn. lia.
-Qed.
+  *)
+Admitted.
 
+(* If R is TM_computable then R is BSM_computable *)
 Theorem TM_computable_to_BSM_computable {k} (R : Vector.t nat k -> nat -> Prop) :
   TM_computable R -> BSM_computable R.
 Proof.
-  intros (n & Σ & s & b & Hsb & M & HM1 & HM2) % TM_computable_iff.
+  (* intros (n & Σ & s & b & Hsb & M & HM1 & HM2) % TM_computable_iff.
   destruct (@PREP_spec k n Σ s b) as [PREP HPREP].
-  destruct (BSM_complete_simulation M (1 + k) (length PREP)) as (Mbsm & Hf & Hb).
+  destruct (BSM_complete_simulation M (1 + k) (length PREP)) as (Msbtm & Mstart & Mbsm & Hf & Hb).
   destruct (@POSTP_spec k n Σ s b (length (PREP ++ Mbsm))) as [POSTP HPOSTP].
   eapply BSM_computable_iff.
   eexists. exists 0. exists (PREP ++ Mbsm ++ POSTP). split.
@@ -1021,4 +1471,7 @@ Proof.
     2:{ eapply subcode_sss_terminates_inv.  1: eapply bsm_sss_fun.
     1: eapply H. 2:{ split.  1: eapply HPREP. cbn. lia. } auto. }
     auto.
-Qed.
+Qed. *)
+Admitted.
+
+Print Assumptions TM_computable_to_BSM_computable.

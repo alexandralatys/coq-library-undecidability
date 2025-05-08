@@ -20,7 +20,8 @@ Set Default Goal Selector "!".
 
 Section Construction.
 
-  Context (M : SBTM) (q0 : state M).
+  (* Shift by shift to the right*)
+  Context (M : SBTM) (q0 : state M) (shift : nat).
 
   #[local] Notation δ := (trans' M).
 
@@ -33,7 +34,12 @@ Section Construction.
     | (ls, a, rs) => [ ls ; [a]%list ; rs ; []%list ]%vector
     end.
 
-  Definition encode_state (q : state M) := (2 + sval (Fin.to_nat q) * c).
+    Print proj1_sig.
+    Print sval.
+
+  (* Shift everything back by one*)
+  Definition encode_state (q : state M) := (1 + shift + sval (Fin.to_nat q) * c).
+
 
   #[local] Arguments encode_state : simpl never.
   #[local] Notation "! p" := (encode_state p) (at level 1).
@@ -41,10 +47,13 @@ Section Construction.
   Definition encode_config '(q, t) : bsm_state 4 := (!q, encode_tape t).
 
   #[local] Notation JMP i := (POP ZERO i i).
+
+  (* Jump after Program now*)
+  Notation END := (1 + shift + c * (num_states M)).
   
   Definition box '(q, a) (f : (state M * bool * direction) -> bsm_instr 4) : bsm_instr 4 :=
     match δ (q, a) with
-    | None => JMP 0
+    | None => JMP END
     | Some t => f t
     end.
 
@@ -82,12 +91,50 @@ Section Construction.
 
   Lemma P_length : length P = 1 + num_states M * c.
   Proof.
-    rewrite /P /=. congr S. have := PROG_length.
-    elim: (num_states M) (PROG); first done.
-    move=> n IH PROG' H. have ->: S n * c = n * c + c by lia.
-    rewrite /= length_app flat_map_concat_map map_map -flat_map_concat_map H.
-    by rewrite IH; [|lia].
+    simpl.
+    congr S.
+    have := PROG_length.
+    elim: (num_states M) (PROG). (* Works like induction ?*)
+    - done.
+    - intros n IH PROG' H.
+      have ->: S n * c = n * c + c by lia.
+      simpl.
+      rewrite length_app.
+      rewrite flat_map_concat_map.
+      rewrite map_map.
+      rewrite <- flat_map_concat_map.
+      rewrite H.
+      rewrite IH.
+      + done.
+      + lia.
   Qed.
+
+  Lemma P_length' : shift + length P = END.
+  Proof.
+    rewrite P_length.
+    cbn.
+    lia.
+  Qed.
+
+  Lemma P_length'' : S (length (flat_map (PROG) (all_fins (num_states M)))) =
+S (c * num_states M).
+  Proof.
+    congr S.
+    have := PROG_length.
+    elim: (num_states M) (PROG).
+    - done.
+    - intros n IH PROG' H.
+      simpl.
+      rewrite length_app.
+      rewrite flat_map_concat_map.
+      rewrite map_map.
+      rewrite <- flat_map_concat_map.
+      rewrite H.
+      rewrite IH.
+      + done.
+      + lia.
+  Qed.
+
 
   Definition Q_step (Q : list (bsm_instr 4)) offset i v : option (bsm_state 4) :=
     match nth_error Q i with
@@ -103,21 +150,38 @@ Section Construction.
 
   Arguments Q_step : simpl never.
 
+  Print sss_step.
+
+  (* If Q_Step returns Some, then the step is valid according to sss_step *)
   Lemma Q_step_spec (Q : list (bsm_instr 4)) offset i v j w : 
     Q_step Q offset i v = Some (j, w) ->
     sss_step (bsm_sss (n:=4)) (offset, Q) (i + offset, v) (j, w).
   Proof.
-    rewrite /Q_step. case E: (nth_error Q i) => [t|]; last done.
-    move: E => /(@nth_error_split (bsm_instr 4)) => - [l] [r] [-> <-].
-    move=> Ht. exists offset, l, t, r, v. split; [|split]; [done|congr pair; lia|].
-    move: t Ht => [].
-    - move=> x p' q' [<-]. 
-      move Ex: (vec_pos v x) => [|[] ?]; by auto using bsm_sss.
-    - move=> x b [<-] <-. by auto using bsm_sss.
+    unfold Q_step.
+    case E: (nth_error Q i) => [t|].
+    - move: E => /(@nth_error_split (bsm_instr 4)) => - [l] [r] [-> <-].
+      intros Ht.
+      exists offset, l, t, r, v. 
+      split.
+      + done.
+      + split.
+        * congr pair.
+          lia.
+        * move: t Ht => [].
+          -- move=> x p' q' [<-].
+             move Ex: (vec_pos v x) => [|[] ?].
+             ++ auto using bsm_sss.
+             ++ auto using bsm_sss.
+             ++ auto using bsm_sss.
+          -- move=> x b [<-] <-.
+             auto using bsm_sss. 
+    - done.
   Qed.
 
   Arguments nth_error : simpl never.
 
+  (* If SBTM does a step, then BSM does the same step encoded
+     k?*)
   Lemma PROG_spec_Some q t q' t' : step M (q, t) = Some (q', t') ->
     exists k, (!q, PROG q) // (encode_config (q, t)) -[S k]-> (encode_config (q', t')).
   Proof.
@@ -130,8 +194,9 @@ Section Construction.
   Qed.
 
   Lemma PROG_spec_None q t : step M (q, t) = None ->
-    exists v, (!q, PROG q) // (encode_config (q, t)) ->> (0, v).
+    exists v, (!q, PROG q) // (encode_config (q, t)) ->> (shift + length P, v).
   Proof.
+    rewrite P_length'.
     move: t => [[ls a] rs] /=. rewrite /step.
     case E: (δ (q, a)) => [[[??]d]|]; first done.
     move=> _. have ->: !q = 0 + !q by done.
@@ -141,9 +206,9 @@ Section Construction.
     all: do ? ((by apply: in_sss_steps_0) || (apply: in_sss_steps_S; [by apply: Q_step_spec|])).
   Qed.
 
-  Lemma PROG_sc (q : state M) : (!q, PROG q) <sc (1, P).
+  Lemma PROG_sc (q : state M) : (!q, PROG q) <sc (shift, P).
   Proof.
-    apply: subcode_cons. rewrite /P /encode_state [1+1]/=.
+    apply: subcode_cons. rewrite /P /encode_state [1+shift]/=.
     suff: forall n, (n + sval (Fin.to_nat q) * c, PROG q) <sc
       (n, flat_map PROG (all_fins (num_states M))) by done.
     have := PROG_length. move: (num_states M) q (PROG) => ?.
@@ -156,10 +221,10 @@ Section Construction.
     - move: (Fin.to_nat q) IH' => [? ?] /=. rewrite length_app H'. lia.
   Qed.
 
-  Opaque P.
+  (* Opaque P. *)
 
   Lemma simulation_step_Some q t q' t' : step M (q, t) = Some (q', t') ->
-    exists k, (1, P) // (encode_config (q, t)) -[S k]-> (encode_config (q', t')).
+    exists k, (shift, P) // (encode_config (q, t)) -[S k]-> (encode_config (q', t')).
   Proof.
     move=> /PROG_spec_Some [k] H. exists k.
     apply: subcode_sss_steps; [|by eassumption].
@@ -167,7 +232,7 @@ Section Construction.
   Qed.
 
   Lemma simulation_step_None q t : step M (q, t) = None ->
-    exists v, (1, P) // (encode_config (q, t)) ->> (0, v).
+    exists v, (shift, P) // (encode_config (q, t)) ->> (shift + length P, v).
   Proof.
     move=> /PROG_spec_None [v Hv]. exists v.
     by apply: subcode_sss_compute; [apply: PROG_sc|].
@@ -175,7 +240,7 @@ Section Construction.
 
   Lemma simulation q t k :
     steps M k (q, t) = None ->
-    exists v, (1, P) // (encode_config (q, t)) ->> (0, v).
+    exists v, (shift, P) // (encode_config (q, t)) ->> (shift + length P, v).
   Proof.
     elim: k q t; first done.
     move=> k IH q t. rewrite (steps_plus 1) /=.
@@ -186,14 +251,54 @@ Section Construction.
     - by move: E => /simulation_step_None.
   Qed.
 
+    Lemma simulation' t k :
+    steps M k (q0, t) = None ->
+    exists v, (shift, P) // (shift, encode_tape t) ->> (shift + length P, v).
+  Proof.
+    intros H0.
+    destruct k.
+    - inversion H0.
+    - assert (H1 := simulation).
+      specialize (H1 q0 t (S k) H0).
+      destruct H1 as [v H1].
+      exists v.
+      unfold sss_compute in H1.
+      destruct H1 as [k0 H1].
+      unfold sss_compute.
+      exists (S k0).
+
+      assert (H5 := in_sss_steps_S).
+      specialize (H5 _ _ (bsm_sss (n:= 4)) (shift, P) k0 (shift, encode_tape t) (!q0, encode_tape t) (shift + length P, v)).
+      apply H5.
+      + unfold P.
+        unfold sss_step. 
+        exists shift.
+        exists [].
+        exists (JMP ! q0).
+        exists (flat_map PROG (all_fins (num_states M))).
+        exists (encode_tape t).
+        split.
+        * auto.
+        * split.
+          -- simpl.
+            replace (shift + 0) with shift by lia.
+            reflexivity.
+          -- apply in_bsm_sss_pop_E.
+            unfold encode_tape.
+            destruct t as [p rs].
+            destruct p as [ls a].
+            reflexivity.
+      + apply H1.
+  Qed.
+
   Lemma inverse_simulation q t n i v :
-    (1, P) // (encode_config (q, t)) -[n]-> (i, v) ->
-    out_code i (1, P) ->
+    (shift, P) // (encode_config (q, t)) -[n]-> (shift + i, v) ->
+    out_code (shift + i) (shift, P) ->
     exists k, steps M k (q, t) = None.
   Proof.
     elim /(Nat.measure_induction _ id) : n q t => - [|n] IH q t.
     { move=> /sss_steps_0_inv [] /= <- _.
-      rewrite /encode_state P_length (ltac:(done) : c = (S (c-1))).
+      rewrite /encode_state P_length'' (ltac:(done) : c = (S (c-1))).
       have := svalP (Fin.to_nat q). nia. }
     case E: (step M (q, t)) => [[q' t']|]; last by (move=> _; exists 1).
     move: (E) => /simulation_step_Some [m].
@@ -207,23 +312,89 @@ Section Construction.
     move=> k Hk. exists (1+k). by rewrite (steps_plus 1) /= E.
   Qed.
 
+  Lemma inverse_simulation' t n i v :
+    (shift, P) // (shift , encode_tape t) -[n]-> (shift + i, v) ->
+    out_code (shift + i) (shift, P) ->
+    exists k, steps M k (q0, t) = None.
+  Proof.
+    intros H0 H1.
+    induction n.
+    - destruct i.
+      + inversion H1; cbn in H; lia.
+      + inversion H0. lia.
+    - assert (H2 := inverse_simulation).
+      specialize (H2 q0 t n i v).
+      apply H2.
+      + assert (H3 := sss_steps_S_inv').
+        specialize (H3 _ _ (bsm_sss (n:= 4)) (shift, P) (shift, encode_tape t) (shift + i, v) n H0).
+        destruct H3 as [str2 H3].
+        destruct H3 as [H3A H3B].
+        unfold sss_step in H3A.
+        destruct H3A.
+        destruct H.
+        destruct H.
+        destruct H.
+        destruct H.
+        destruct H.
+        destruct H3.
+        injection H.
+        injection H3.
+        intros.
+        assert (H9 : x0 = []).
+        * rewrite H8 in H6. 
+          assert (length x0 = 0) by lia.
+          apply length_zero_iff_nil.
+          apply H9.
+        *
+        rewrite H9 in H7.
+        replace ([] ++ x1 :: x2) with (x1 :: x2) in H7 by auto.
+        unfold P in H7.
+        inversion H7.
+        rewrite <- H11 in H4.
+        inversion H4.
+        -- rewrite <- H13 in H3B. apply H3B.
+        -- unfold encode_tape in H18.
+          destruct t in H18.
+          destruct p0 in H18.
+          simpl in H18.
+          inversion H18.
+        -- unfold encode_tape in H18.
+          destruct t in H18.
+          destruct p0 in H18.
+          simpl in H18.
+          inversion H18.
+      + apply H1.
+Qed.
+
+    
+      
+
+
+
+
 End Construction.
 
 Require Import Undecidability.Synthetic.Definitions.
+
+Arguments mult _ _ : simpl never.
 
 Theorem reduction :
   SBTM_HALT ⪯ BSM_HALTING.
 Proof.
   exists (fun '(existT _ M (q, t)) =>
-    existT _ 4 (existT _ 1 (existT _ (@P M q) (encode_tape t)))).
+    existT _ 4 (existT _ 0 (existT _ (@P M q 0) (encode_tape t)))).
   move=> [M [q [[ls a] rs]]]. split.
-  - move=> [k] /simulation => /(_ q) [v Hv] /=.
-    exists (0, v). split => /=; [|lia].
-    rewrite /P.
-    bsm sss POP empty with ZERO (encode_state M q) (encode_state M q).
+  - move=> [k] /simulation => /(_ q 0) [v Hv] /=.
+    exists ((1 + c * (num_states M)), v). split => /=.
+    + rewrite /P.
+      rewrite P_length' in Hv.
+      bsm sss POP empty with ZERO (encode_state M 0 q ) (encode_state M 0 q).
+    + right.
+      rewrite <- (P_length'' M 0).
+      constructor.
   - move=> [] [i v] [] [?] H /= ?.
     rewrite /P in H.
-    bsm inv POP empty with H ZERO (encode_state M q) (encode_state M q).
+    bsm inv POP empty with H ZERO (encode_state M 0 q) (encode_state M 0 q).
     + move: H => [?] [?] /inverse_simulation. by apply.
     + move=> []. lia.
 Qed.

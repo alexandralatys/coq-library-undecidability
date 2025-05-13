@@ -3,6 +3,7 @@ From Undecidability.StackMachines Require Import BSM BSM.bsm_defs.
 From Undecidability.TM Require Import SBTM Util.SBTM_facts.
 From Undecidability.Shared.Libs.DLW Require Import vec subcode sss.
 
+
 Require Import PeanoNat List Lia.
 Import Vector.VectorNotations ListNotations SBTMNotations.
 #[local] Open Scope list_scope.
@@ -51,14 +52,22 @@ Section Construction.
   (* Jump after Program now*)
   Notation END := (1 + shift + c * (num_states M)).
   
-  Definition box '(q, a) (f : (state M * bool * direction) -> bsm_instr 4) : bsm_instr 4 :=
+  (* THIS needs to be adapted somehow, but how to deal with length? -> Keep length at 2 *)
+  (* Definition box '(q, a) (f : (state M * bool * direction) -> list (bsm_instr 4)) : bsm_instr 4 :=
     match δ (q, a) with
-    | None => JMP END
-    | Some t => f t
-    end.
+    | None => PUSH CURR a :: JMP END :: []
+    | Some t => DUMMY INSTRUCTION :: f t :: []
+    end. *)
+
+  Definition box '(q, a) (f : (state M * bool * direction) -> bsm_instr 4) : bsm_instr 4 :=
+  match δ (q, a) with
+  | None => JMP END
+  | Some t => f t
+  end.
 
   Definition CURR' := CURR. (* to distinguish duplicate operations for subcode_tac *)
 
+  (* TODO does this even retain outputs ?  -> IT DOES NOT*)
   Definition PROG (q : state M) :=
     let off := !q in
   (*      off *) POP CURR (7 + off) (7 + off) ::
@@ -190,6 +199,10 @@ S (c * num_states M).
     move=> [<- <-]. have ->: !q = 0 + !q by done.
     move: d a ls rs E => [] [] [|[] ls] [|[] rs] E.
     all: eexists; rewrite /PROG /box E.
+
+    1: do ? ((by apply: in_sss_steps_0) || (apply: in_sss_steps_S; [by apply: Q_step_spec|])).
+
+
     all: do ? ((by apply: in_sss_steps_0) || (apply: in_sss_steps_S; [by apply: Q_step_spec|])).
   Qed.
 
@@ -205,6 +218,40 @@ S (c * num_states M).
     all: eexists; rewrite /PROG /box E.
     all: do ? ((by apply: in_sss_steps_0) || (apply: in_sss_steps_S; [by apply: Q_step_spec|])).
   Qed.
+
+  Lemma PROG_spec_None_output q t : step M (q, t) = None ->
+    (!q, PROG q) // (encode_config (q, t)) ->> (shift + length P, encode_tape t).
+  Proof.
+    (* rewrite P_length'.
+    move: t => [[ls a] rs] /=. rewrite /step.
+    case E: (δ (q, a)) => [[[??]d]|]; first done.
+    (* move=> _. have ->: !q = 0 + !q by done. *)
+    intros.
+
+    eexists (1 + _).
+    destruct a.
+    -
+    -
+    unfold PROG.
+
+
+
+
+
+
+
+
+    move: a E => [] E.
+    
+
+
+
+
+
+    (* all: exists [ ls ; []%list ; rs ; []%list ]%vector. *)
+    (* all: eexists; rewrite /PROG /box E.  *)
+    all: do ? ((by apply: in_sss_steps_0) || (apply: in_sss_steps_S; [by apply: Q_step_spec|])). *)
+  Admitted.
 
   Lemma PROG_sc (q : state M) : (!q, PROG q) <sc (shift, P).
   Proof.
@@ -238,6 +285,17 @@ S (c * num_states M).
     by apply: subcode_sss_compute; [apply: PROG_sc|].
   Qed.
 
+    Lemma simulation_step_None_output q t : step M (q, t) = None ->
+    (shift, P) // (encode_config (q, t)) ->> (shift + length P, encode_tape t).
+  Proof.
+    move=> /PROG_spec_None_output Hv.
+
+    assert (H1 := PROG_sc q).
+    assert (H2 := subcode_sss_compute).
+    specialize (H2 _ _ _ _ _ _ _ H1 Hv).
+    apply H2.
+  Qed.
+
   Lemma simulation q t k :
     steps M k (q, t) = None ->
     exists v, (shift, P) // (encode_config (q, t)) ->> (shift + length P, v).
@@ -250,6 +308,103 @@ S (c * num_states M).
       by apply.
     - by move: E => /simulation_step_None.
   Qed.
+
+
+  Lemma simulation_output q q' t t' k :
+    steps M k (q, t) = Some (q', t') ->
+    (shift, P) // (encode_config (q, t)) ->> (encode_config (q', t')).
+  Proof.
+    elim: k q t.
+    + intros.
+      injection H.
+      intros.
+      subst.
+      simpl.
+      unfold sss_compute.
+      exists 0.
+      constructor.
+    +
+    move=> k IH q t. rewrite (steps_plus 1) /=.
+    case E: (step M (q, t)) => [[q'' t'']|].
+    - move=> /IH [v] Hv.
+
+      assert (Y := simulation_step_Some).
+      specialize (Y _ _ _ _ E).
+      destruct Y.
+
+      exists ((S x) + v).
+
+      assert (X := sss_steps_trans).
+      specialize (X _ _ _ _ _ _ _ _ _ H Hv).
+      simpl in X.
+      apply X.
+
+    - by move: E => /simulation_step_None.
+  Qed.
+
+  Lemma simulation_output'' q q' t t' k :
+    steps M k (q, t) = Some (q', t') ->
+    steps M (S k) (q, t) = None ->
+    (shift, P) // (encode_config (q, t)) ->> (shift + length P, encode_tape t').
+  Proof.
+    elim: k q t.
+    + intros.
+
+      assert (H2 := simulation_output).
+      specialize (H2 _ _ _ _ _ H).
+      unfold sss_compute in H2.
+      destruct H2 as [k H2].
+
+      assert (X := simulation_step_None_output).
+      specialize (X _ _ H0).
+
+      inversion H.
+      subst.
+      apply X.
+
+    +
+    move=> k IH q t.
+    intros. 
+    replace (S k) with (1 + k) in H by lia.
+    replace (S (S k)) with (1 + (S k)) in H0 by lia.
+    rewrite steps_plus in H.
+    rewrite steps_plus in H0.
+    case E: (step M (q, t)) => [[q'' t'']|].
+    - 
+      
+      simpl in H.
+      rewrite E in H.
+
+      replace (steps M 1 (q, t)) with (step M (q,t)) in H0 by easy.
+      rewrite E in H0.
+
+      simpl in H.
+      simpl in H0.
+
+      replace (SBTM.obind (step M) (steps M k (q'', t''))) with (steps M (S k) (q'', t'')) in H0 by easy.
+      
+      specialize (IH _ _ H H0).
+
+      destruct IH as [k0 IH].
+
+
+      assert (Y := simulation_step_Some).
+      specialize (Y _ _ _ _ E).
+      destruct Y.
+
+      exists ((S x) + k0).
+
+      assert (X := sss_steps_trans).
+      specialize (X _ _ _ _ _ _ _ _ _ H1 IH).
+      apply X.
+
+    - simpl in H.
+      rewrite E in H.
+      simpl in H.
+      inversion H.
+  Qed.
+
+
 
     Lemma simulation' t k :
     steps M k (q0, t) = None ->
@@ -290,6 +445,45 @@ S (c * num_states M).
             reflexivity.
       + apply H1.
   Qed.
+
+
+      Lemma simulation_output' q' t t' k :
+    steps M k (q0, t) = Some (q', t') ->
+    steps M (S k) (q0, t) = None ->
+    (shift, P) // (shift, encode_tape t) ->> (shift + length P, encode_tape t').
+  Proof.
+    intros H0 H1.
+
+    assert (H2 := simulation_output'').
+    specialize (H2 q0 q' t t' k H0 H1).
+    unfold sss_compute in H2.
+    destruct H2 as [k0 H2].
+    unfold sss_compute.
+    exists (1 + k0).
+
+    assert (A : (shift, P) // (shift, encode_tape t) -[1]-> encode_config (q0, t)).
+    - apply sss_steps_1.
+      unfold sss_step.
+      unfold P.
+      exists shift.
+      eexists [].
+      eexists (JMP ! q0).
+      eexists (flat_map PROG (all_fins (num_states M))).
+      eexists (encode_tape t).
+      split.
+      +  cbn. reflexivity.
+      + split.
+        * cbn. replace (shift + 0) with shift by lia. reflexivity.
+        * apply in_bsm_sss_pop_E.
+            unfold encode_tape.
+            destruct t.
+            destruct p.
+            reflexivity.
+    - assert (T := sss_steps_trans).
+      specialize (T _ _ _ _ _ _ _ _ _ A H2).
+      apply T.
+  Qed.
+
 
   Lemma inverse_simulation q t n i v :
     (shift, P) // (encode_config (q, t)) -[n]-> (shift + i, v) ->
@@ -365,6 +559,7 @@ S (c * num_states M).
           inversion H18.
       + apply H1.
 Qed.
+
 
     
       

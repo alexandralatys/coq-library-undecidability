@@ -894,6 +894,7 @@ Lemma simulation_output q q' t t' t''':
   almost_eq_tape t''' (encode_tape (Vector.hd t)) ->
   (exists k l, steps k ((encode_state q), t''') = Some (encode_state q', l)
   /\
+  steps (S k) ((encode_state q), t''') = None /\
   almost_eq_tape l ((encode_tape (Vector.hd t')))
   ).
 Proof.
@@ -908,7 +909,7 @@ Proof.
   induction n.
   - intros.
     simpl in H.
-    destruct (TM_facts.haltConf (TM_facts.mk_mconfig q t)).
+    destruct (TM_facts.haltConf (TM_facts.mk_mconfig q t)) eqn:H1.
     + inversion H.
       exists 0.
       (* exists (encode_state q'). *)
@@ -916,7 +917,14 @@ Proof.
       simpl.
       split.
       * reflexivity.
-      * rewrite <- H3. apply H0. 
+      * split.
+        -- assert (X := simulation_halt).
+           unfold TM_facts.haltConf in H1.
+           unfold TM_facts.cstate in H1.
+           specialize (X _ t''' H1).
+           rewrite <- H3.
+           apply X.
+        -- rewrite <- H4. apply H0. 
     + inversion H.
   - intros.
 
@@ -935,7 +943,12 @@ Proof.
         simpl.
         split.
         * rewrite H3. reflexivity.
-        * rewrite <- H2. apply H0.
+        * split.
+          -- assert (X := simulation_halt).
+            specialize (X _ t''' H1).
+            apply X.
+
+          -- rewrite <- H2. apply H0.
       
       +
 
@@ -1008,15 +1021,14 @@ Some (encode_state q'', p) ->
             (* destruct IHn as [q'0 IHn]. *)
             destruct IHn as [l IHn].
             destruct IHn as [IHn1 IHn2].
+            destruct IHn2 as [IHn2 IHn3].
 
             exists ((S k) + k0).
             (* exists q'0. *)
             exists l.
 
-            split. 2: apply IHn2.
-
-
-            assert (U := @SBTM_facts.steps_plus).
+            split.
+            ++ assert (U := @SBTM_facts.steps_plus).
             specialize (U M' (S k) k0 ((encode_state q, t'''))).
 
             rewrite U.
@@ -1029,6 +1041,34 @@ Some (encode_state q'', p) ->
             simpl.
 
             apply IHn1.
+            ++ split.
+              ** unfold steps.
+                rewrite <- Nat.iter_succ.
+                replace (S (S k + k0)) with (S k + S k0) by lia.
+
+               
+               assert (U := @SBTM_facts.steps_plus).
+            specialize (U M' (S k) (S k0) ((encode_state q, t'''))).
+              
+
+              replace (steps (S k + S k0) (encode_state q, t''')) with (Nat.iter (S k + S k0) (SBTM.obind step) (Some (encode_state q, t'''))) in U by easy.
+              rewrite U.
+              rewrite H3.
+              unfold obind.
+              unfold oapp.
+              apply IHn2.
+
+
+
+
+
+
+
+
+              ** apply IHn3.
+
+
+            
 
             -- 
             
@@ -1065,6 +1105,8 @@ Qed.
     rewrite /= /TM_facts.haltConf Hq -Hn -E (Vector.eta t) /=.
     move: (Vector.tl t). by apply: Vector.case0.
   Qed.
+
+
 
 
 
@@ -1597,6 +1639,41 @@ End Construction.
 Require Import Undecidability.Synthetic.Definitions.
 Require Import Undecidability.Synthetic.ReducibilityFacts.
 Require Undecidability.TM.Reductions.Arbitrary_to_Binary.
+
+
+(* TODO existentially quantified q' *)
+Lemma SBTM_simulation (M : TM.TM (finType_CS bool) 1) :
+  {M' : SBTM & 
+    { q_start : SBTMNotations.state M' |
+        ((forall q t t' t'', TM.eval M (TM.start M) t q t' ->
+         SBTM_facts.almost_eq_tape t'' (encode_tape (Vector.hd t)) ->
+         exists k q' t''', (SBTM.steps M' k (q_start, t'') = Some (q', t''') /\
+         SBTM.steps M' (S k) (q_start, t'') = None /\
+         almost_eq_tape t'''  (encode_tape (Vector.hd t')))))
+        
+        /\
+        (forall t, (exists k, SBTM.steps M' k (q_start, (encode_tape (Vector.hd t))) = None) -> (exists q' t', TM.eval M (TM.start M) t q' t'))}}.
+Proof.
+  exists (M' M).
+  exists ((encode_space M (space_base M (TM.start M)))).
+  split.
+  - intros.
+    assert (U := simulation_output).
+    specialize (U M (TM.start M) q t t' t'' H H0).
+    destruct U.
+    destruct H1.
+    eexists _.
+    eexists _.
+    eexists _.
+    apply H1.
+
+  - intros.
+    destruct H as [k H].
+    assert (U := inverse_simulation).
+    specialize (U M (TM.start M) t k H).
+    apply U.
+Qed.
+
 
 Theorem reduction :
   TM.HaltTM 1 ⪯ SBTM_HALT.

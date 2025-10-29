@@ -57,7 +57,6 @@ Section Construction.
 
   Definition CURR' := CURR. (* to distinguish duplicate operations for subcode_tac *)
 
-  (* TODO does this even retain outputs ?  -> IT DOES NOT*)
   Definition PROG (q : state M) :=
     let off := !q in
   (*      off *) POP CURR (7 + off) (7 + off) ::
@@ -125,7 +124,6 @@ Section Construction.
 
   Arguments Q_step : simpl never.
 
-  (* If Q_Step returns Some, then the step is valid according to sss_step *)
   Lemma Q_step_spec (Q : list (bsm_instr 4)) offset i v j w : 
     Q_step Q offset i v = Some (j, w) ->
     sss_step (bsm_sss (n:=4)) (offset, Q) (i + offset, v) (j, w).
@@ -141,7 +139,6 @@ Section Construction.
 
   Arguments nth_error : simpl never.
 
-  (* If SBTM does a step, then BSM does the same step encoded k?*)
   Lemma PROG_spec_Some q t q' t' : step M (q, t) = Some (q', t') ->
     exists k, (!q, PROG q) // (encode_config (q, t)) -[S k]-> (encode_config (q', t')).
   Proof.

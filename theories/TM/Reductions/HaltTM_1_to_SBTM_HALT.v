@@ -568,7 +568,6 @@ Require Import Undecidability.Synthetic.Definitions.
 Require Import Undecidability.Synthetic.ReducibilityFacts.
 Require Undecidability.TM.Reductions.Arbitrary_to_Binary.
 
-(* TODO existentially quantified q' *)
 Lemma SBTM_simulation (M : TM.TM (finType_CS bool) 1) :
   {M' : SBTM & 
     { q_start : SBTMNotations.state M' |

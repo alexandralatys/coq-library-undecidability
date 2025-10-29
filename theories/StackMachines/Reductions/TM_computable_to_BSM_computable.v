@@ -773,7 +773,6 @@ strpush_common s b ++
         flat_map encode_symbol (
                     encoding_func (inr (sigList_X (EncodeTapes.UnmarkedSymbol s)))).
 
-
 Lemma encode_tapes_cons {sig n} t (ts : tapes sig n) : encode_tapes (t ::: ts) = sigList_cons :: map sigList_X (encode_tape t) ++ encode_tapes ts.
 Proof. reflexivity. Qed.
 
@@ -821,7 +820,7 @@ Proof.
     unfold encoding_func.
     rewrite encode_length.
     now rewrite length_encode_sym.
-Qed.
+Time Qed.
 
 
 (* Truncation simulation *)
@@ -1576,10 +1575,10 @@ Lemma PREP1_spec k Σ n :
 Proof.
   exists (
       push_exactly (pos_right (1 + k) Fin0) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin0])
-        ++ push_exactly (pos_right (1 + k) Fin1) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin1])
-       ++ push_exactly (pos_right (1 + k) Fin2) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin2])
-       ++ push_exactly (pos_right (1 + k) Fin3) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin3])
-       ++ push_exactly (pos_right (1 + k) Fin4) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin4])).
+      ++ push_exactly (pos_right (1 + k) Fin1) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin1])
+      ++ push_exactly (pos_right (1 + k) Fin2) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin2])
+      ++ push_exactly (pos_right (1 + k) Fin3) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin3])
+      ++ push_exactly (pos_right (1 + k) Fin4) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin4])).
   intros v.
   rewrite <- !vec_app_spec.
   (* Keeps expression smaller *)
@@ -1588,10 +1587,9 @@ Proof.
     now apply (Fin.case0).
   }
 
-  eapply subcode_sss_compute_trans.
-
-  2: eapply (push_exactly_spec (pos_right (1 + k) Fin0) 0 ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin0])).
-  1: now auto.
+  eapply subcode_sss_compute_trans; 
+  [| eapply (push_exactly_spec (pos_right (1 + k) Fin0) 0 ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin0]))| ];
+  [now auto |].
   rewrite vec_change_app_right, vec_pos_app_right, <- vec_pos_spec, H0, vec_pos_spec, encode_bsm_at0.
   eapply subcode_sss_compute_trans. 2: eapply (push_exactly_spec (pos_right (1 + k) Fin1) _ ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin1])). 1:auto.
   rewrite vec_change_app_right, vec_pos_app_right, <- vec_pos_spec, H0, vec_pos_spec, encode_bsm_at1.
@@ -1969,7 +1967,9 @@ Proof.
        rewrite vec'_pos_app_right. cbn.
     intros (l' & Hneq).
      unfold THESYM in Hneq. eapply utils_list.list_app_inj in Hneq as [].
-     2: unfold encoding_func; repeat rewrite ENC; now rewrite !length_encode_sym.
+     2: 
+     unfold encoding_func; 
+     repeat rewrite ENC; now rewrite !length_encode_sym.
      unfold encoding_func, encoding_func' in H.
       eapply flat_map_encode_symbol_inj in H.
       eapply encode_sym_inj in H.
@@ -2063,5 +2063,3 @@ Proof.
     1: eapply H. 2:{ split.  1: eapply HPREP. cbn. lia. } auto. }
     auto.
 Qed.
-
-

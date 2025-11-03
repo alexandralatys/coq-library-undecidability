@@ -71,7 +71,6 @@ Module SBTM_facts.
     constructor; apply: almost_eq_trans; by eassumption.
   Qed.
 
-  (* remove redundant false symbols by Alexandra Latys *)
   Fixpoint truncate (l : list bool) : list bool :=
     if forallb negb l then [] else
     match l with
@@ -103,7 +102,7 @@ Module SBTM_facts.
     move: t => [[ls a] rs]. constructor; by apply: almost_eq_truncate.
   Qed.
 
-    Lemma truncate_repeat_false n : truncate (repeat false n) = [].
+  Lemma truncate_repeat_false n : truncate (repeat false n) = [].
   Proof.
     elim: n; first done.
     move=> n IH /=.
@@ -112,8 +111,6 @@ Module SBTM_facts.
     suff: (forallb negb (repeat false n) = true) by congruence.
     by apply /forallb_forall => a /(@repeat_spec bool) ->.
   Qed.
-
-
 
   Lemma almost_eq_truncate_iff l1 l2 : almost_eq l1 l2 <-> truncate l1 = truncate l2.
   Proof.
@@ -132,7 +129,6 @@ Module SBTM_facts.
       by apply: almost_eq_trans.
   Qed.
       
-
   Lemma almost_eq_truncate_tape_iff t1 t2:
     truncate_tape t1 = truncate_tape t2 <-> almost_eq_tape t1 t2.
   Proof.
@@ -157,11 +153,6 @@ Module SBTM_facts.
     apply: almost_eq_tape_steps_None.
     by apply: almost_eq_tape_truncate_tape.
   Qed.
-
-
-
-
-
 
 End SBTM_facts.
 

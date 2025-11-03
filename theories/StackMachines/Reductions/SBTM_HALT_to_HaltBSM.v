@@ -44,7 +44,7 @@ Section Construction.
 
   #[local] Notation JMP i := (POP ZERO i i).
 
-  (* Jump after Program now *)
+  (* Jump to after Program *)
   Notation POST_TRUE := (1 + shift + c * (num_states M)).
   Notation POST_FALSE := (3 + shift + c * (num_states M)).
   Notation END := (5 + shift + c * (num_states M)).

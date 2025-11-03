@@ -1,7 +1,7 @@
 Set Default Goal Selector "!".
 Set Mangle Names.
 
-Require Import
+Require Import 
   Undecidability.StackMachines.BSM Undecidability.StackMachines.Util.BSM_computable
   Undecidability.TM.TM Undecidability.TM.Util.TM_facts Undecidability.TM.Util.TM_computable.
 From Undecidability.StackMachines Require Import SBTM_HALT_to_HaltBSM.
@@ -12,11 +12,16 @@ Require Import Undecidability.TM.Code.Code.
 From Undecidability.Shared.Libs.PSL Require FinTypes.
 From Undecidability.TM Require Import Single.EncodeTapes.
 From Undecidability.TM Require Import SBTM.
+From Undecidability.StackMachines Require Import BSM BSM.bsm_defs.
 
 Create HintDb vec_simpl discriminated.
 
 Hint Rewrite vec_change_eq using easy : vec_simpl.
 Hint Rewrite vec_change_neq using easy : vec_simpl.
+
+Notation "P // s -[ k ]-> t" := (sss_steps (@bsm_sss _) P k s t).
+Notation "P // s ->> t" := (sss_compute (@bsm_sss _) P s t).
+Notation "P // s ~~> t" := (sss_output (@bsm_sss _) P s t).
 
 (*--- Utility ---*)
 
@@ -61,8 +66,6 @@ Proof.
     intros [= ->]. f_equal. eauto.
 Qed.
 
-
-(* There is a head x and tail v' such that x ++ v' = v. Cast because append returns n + 1 and we need S n.*)
 Lemma vector_inv_back {X n} (v : Vector.t X (S n)) E :
   { '(x, v') : X * Vector.t X n | v = Vector.cast (Vector.append v' (x ## vec_nil)) E }.
 Proof.
@@ -74,7 +77,6 @@ Proof.
   intros ?. now eapply Vector.case0.
 Qed.
 
-(* If mth element of vector list v is not an error, then it retunrns the same (wrapped in option) as vec_pos.*)
 Lemma nth_error_vec_list {X n} (v : Vector.t X n) m (H : m < n) x :
   nth_error (vec_list v) m = Some x ->
   vec_pos v (Fin.of_nat_lt H) = x.
@@ -83,14 +85,12 @@ Proof.
   destruct m; cbn; [congruence | now apply IHv].
 Qed.
 
-(* Vec lists still equal after length cast*)
 Lemma vec_list_cast {X n} (v :Vector.t X n) m (E : n = m) :
  vec_list (Vector.cast v E) = vec_list v.
 Proof.
   destruct E. now rewrite cast_eq_refl.
 Qed.
 
-(* Distributivity of vec_list*)
 Lemma vec_list_vec_app {X n m} (v : Vector.t X n) (w : Vector.t X m) :
   vec_list (vec_app v w) = vec_list v ++ vec_list w.
 Proof.
@@ -100,11 +100,9 @@ Proof.
   - cbn. f_equal. eauto.
 Qed.
 
-(* Vector.const and then to list equals List.repeat*)
 Lemma vec_list_const {X x n} : vec_list (@Vector.const X x n) = List.repeat x n.
 Proof. induction n; cbn; congruence. Qed.
 
-(* Set nth element of l to y*)
 Fixpoint update {X} (n : nat) (l : list X) y :=
   match l, n with
   | nil, _ => nil
@@ -112,7 +110,6 @@ Fixpoint update {X} (n : nat) (l : list X) y :=
   | x :: l, S n => x :: update n l y
   end.
 
-(* If update index lies within l2, update can be pushed under ++ *)
 Lemma update_app_right {X} (x : X) l1 l2 i : 
   i >= length l1 ->
   update i (l1 ++ l2) x = l1 ++ update (i - length l1) l2 x.
@@ -122,7 +119,6 @@ Proof.
   cbn. rewrite IHl1; [reflexivity| lia].
 Qed.
 
-(* Same as above*)
 Lemma update_app_left {X} (x : X) l1 l2 i : 
   i < length l1 ->
   update i (l1 ++ l2) x = update i l1 x ++ l2.
@@ -132,7 +128,6 @@ Proof.
   rewrite IHl1; [reflexivity|lia].
 Qed.
 
-(* vec_change works the same as update *)
 Lemma vec_list_vec_change {X n} (v : Vector.t X n) (x : X) (p : pos n) :
   vec_list (vec_change v p x) = update (proj1_sig (Fin.to_nat p)) (vec_list v) x.
 Proof.
@@ -142,8 +137,6 @@ Proof.
     intros p0. specialize (IHv p0). destruct (Fin.to_nat p0) eqn:E. cbn in *. now f_equal.
 Qed.
 
-
-(* if change index is in v2, vec_change can be pulled down *)
 Lemma vec_change_app_right {X} (n m : nat) v1 v2 p x:
   vec_change (@vec_app X n m v1 v2) (pos_right n p) x = vec_app v1 (vec_change v2 p x).
 Proof.
@@ -152,26 +145,24 @@ Proof.
   - rewrite !vec_app_cons. cbn. now rewrite IHv1.
 Qed.
 
-(* pos_right and pos_left are not equal*)
-Lemma pos_right_left {n m} p q :
-@pos_left n m p <> @pos_right n m q.
+Lemma pos_right_left {n m} p q : @pos_left n m p <> @pos_right n m q.
 Proof.
-induction n; cbn.
-- inversion p.
-- eapply (Fin.caseS' p).
-  + cbn. congruence.
-  + cbn. intros ? ? % pos_nxt_inj. firstorder.
+  induction n; cbn.
+  - inversion p.
+  - eapply (Fin.caseS' p).
+    + cbn. congruence.
+    + cbn. intros ? ? % pos_nxt_inj. firstorder.
 Qed.
 
-Lemma pos_left_right {n m} p q :
-@pos_right n m q <> @pos_left n m p.
+Lemma pos_left_right {n m} p q : @pos_right n m q <> @pos_left n m p.
 Proof.
-induction n; cbn.
-- inversion p.
-- eapply (Fin.caseS' p).
-  + cbn. congruence.
-  + cbn. intros ? ? % pos_nxt_inj. firstorder.
+  induction n; cbn.
+  - inversion p.
+  - eapply (Fin.caseS' p).
+    + cbn. congruence.
+    + cbn. intros ? ? % pos_nxt_inj. firstorder.
 Qed.
+
 Local Hint Immediate pos_left_right pos_right_left : core.
 
 Lemma vec_change_app_left {X} (n m : nat) v1 v2 p x:
@@ -186,7 +177,6 @@ Proof.
   - intros p0. rewrite !vec_pos_app_right. rewrite vec_change_neq; auto. now rewrite vec_pos_app_right.
 Qed.
 
-(* If apps are the same and first lists are the same, second lists are also the same*)
 Lemma vec_app_inj {X} (n m : nat) v1 v2 v2' :
   @vec_app X n m v1 v2 = vec_app v1 v2' -> v2 = v2'.
 Proof.
@@ -196,7 +186,6 @@ Proof.
     now eapply (f_equal (@vec_tail _ _)) in H.
 Qed.
 
-(* vec_pos behaves the same as Vector.nth *)
 Lemma vec_pos_spec {k} {X} (p : pos k) (v : Vector.t X k) : vec_pos v p = Vector.nth v p.
 Proof.
   induction v in p |- *.
@@ -206,7 +195,6 @@ Proof.
     + intros. cbn. eauto.
 Qed.
 
-(* if two pos_rights are equal, p and q are also equal*)
 Lemma pos_right_inj {n m} p q :
   @pos_right n m p = @pos_right n m q -> p = q.
 Proof.
@@ -215,24 +203,17 @@ Proof.
   - intros H. eapply IHn, pos_nxt_inj, H.
 Qed.
 
-(* pth entry of constant x vector is x*)
 Lemma vec_pos_const {k} {X x} (p : pos k) : vec_pos (@Vector.const X x k) p = x.
 Proof.
   induction p; cbn; eauto.
 Qed.
 
-(*
-  vec_map and Vector.map behave the same
-*)
 Lemma vec_map_spec {X Y n} (v : Vector.t X n) (f : X -> Y) :
   vec_map f v = Vector.map f v.
 Proof.
   induction v; cbn; congruence.
 Qed.
 
-(*
-  Same as above for pos_left
-*)
 Lemma pos_left_inj {n m} p q :
   @pos_left n m p = @pos_left n m q -> p = q.
 Proof.
@@ -248,9 +229,9 @@ Qed.
 
 (* Utility lemmas for BSM instructions*)
 Lemma POP_true_spec m (STACK : Fin.t m) n t j v v' k1 k2 :
-    vec_pos v STACK = true :: v' ->
-    bsm_sss (POP STACK k1 k2) (j, v) (n, t) ->
-    n = j + 1 /\ t = vec_change v STACK v'.
+  vec_pos v STACK = true :: v' ->
+  bsm_sss (POP STACK k1 k2) (j, v) (n, t) ->
+  n = j + 1 /\ t = vec_change v STACK v'.
 Proof.
   intros H H0.
   inversion H0 as [????? H1|?????? H1 | ?????? H1 | ]; subst; try clear H0; 
@@ -259,110 +240,109 @@ Proof.
 Qed.
 
 Lemma POP_false_spec m (STACK : Fin.t m) n t j v v' k1 k2 :
-    vec_pos v STACK = false :: v' ->
-    bsm_sss (POP STACK k1 k2) (j, v) (n, t) ->
-    n = k1 /\ t = vec_change v STACK v'.
+  vec_pos v STACK = false :: v' ->
+  bsm_sss (POP STACK k1 k2) (j, v) (n, t) ->
+  n = k1 /\ t = vec_change v STACK v'.
 Proof.
   intros H H0.
   inversion H0 as [????? H1|?????? H1 | ?????? H1 | ]; subst; try clear H0; rewrite H1 in H; [inversion H |  | inversion H].
   injection H. clear H. intros H. subst. split; [lia | reflexivity].
- Qed.
+Qed.
 
-  Lemma POP_empty_spec m (STACK : Fin.t m) n t j v k1 k2 :
-    vec_pos v STACK = [] ->
-    bsm_sss (POP STACK k1 k2) (j, v) (n, t) ->
-    n = k2 /\ v = t.
-  Proof.
-    intros H H0.
-    inversion H0 as [????? H1|?????? H1 | ?????? H1 | ]; subst; try clear H0; rewrite H1 in H; [| inversion H | inversion H].
-    now split.
-  Qed.
+Lemma POP_empty_spec m (STACK : Fin.t m) n t j v k1 k2 :
+  vec_pos v STACK = [] ->
+  bsm_sss (POP STACK k1 k2) (j, v) (n, t) ->
+  n = k2 /\ v = t.
+Proof.
+  intros H H0.
+  inversion H0 as [????? H1|?????? H1 | ?????? H1 | ]; subst; try clear H0; rewrite H1 in H; [| inversion H | inversion H].
+  now split.
+Qed.
 
-  Lemma POP_empty_spec' m (STACK1 STACK2 : Fin.t m) n t j v k1 k2 :
-    vec_pos v STACK1 = [] ->
-    bsm_sss (POP STACK2 k1 k2) (j, v) (n, t) ->
-    vec_pos t STACK1 = [].
-  Proof.
-    intros H0 H1.
-    destruct (vec_pos v STACK2) as [| b l] eqn:E.
-    - apply POP_empty_spec in H1; [| apply E].
-      destruct H1 as [H1 ?]. subst. apply H0.
-    - destruct b; [apply POP_true_spec with (v' := l) in H1; [| apply E]| apply POP_false_spec with (v' := l) in H1; [| apply E]].
-      all: destruct H1; subst; rewrite vec_change_neq; [apply H0|];
-      assert (NEQ : STACK2 <> STACK1); [| apply NEQ];
-      unfold "<>"; intros H3; rewrite <- H3 in H0; rewrite E in H0; inversion H0.
-  Qed.
+Lemma POP_empty_spec' m (STACK1 STACK2 : Fin.t m) n t j v k1 k2 :
+  vec_pos v STACK1 = [] ->
+  bsm_sss (POP STACK2 k1 k2) (j, v) (n, t) ->
+  vec_pos t STACK1 = [].
+Proof.
+  intros H0 H1.
+  destruct (vec_pos v STACK2) as [| b l] eqn:E.
+  - apply POP_empty_spec in H1; [| apply E].
+    destruct H1 as [H1 ?]. subst. apply H0.
+  - destruct b; [apply POP_true_spec with (v' := l) in H1; [| apply E]| apply POP_false_spec with (v' := l) in H1; [| apply E]].
+    all: destruct H1; subst; rewrite vec_change_neq; [apply H0|];
+    assert (NEQ : STACK2 <> STACK1); [| apply NEQ];
+    unfold "<>"; intros H3; rewrite <- H3 in H0; rewrite E in H0; inversion H0.
+Qed.
 
-  Lemma PUSH_spec (STACK : Fin.t 5) n t j v b :
-    bsm_sss (PUSH STACK b) (j, v) (n, t) ->
-    n = j + 1 /\ t = vec_change v STACK (b :: (vec_pos v STACK)).
-  Proof.
-    intros H0.
-    inv H0.
-    now split; [lia | reflexivity].
-  Qed.
+Lemma PUSH_spec (STACK : Fin.t 5) n t j v b :
+  bsm_sss (PUSH STACK b) (j, v) (n, t) ->
+  n = j + 1 /\ t = vec_change v STACK (b :: (vec_pos v STACK)).
+Proof.
+  intros H0.
+  inv H0.
+  now split; [lia | reflexivity].
+Qed.
 
+(* Utility function and lemmas for truncation*)
+Fixpoint remove_leading_falses (l : list bool) :=
+  match l with
+  | false :: l' => remove_leading_falses l'
+  | l' => l'
+  end.
 
-  (* Utility lemmas for truncation*)
-    Fixpoint remove_leading_falses (l : list bool) :=
-    match l with
-    | false :: l' => remove_leading_falses l'
-    | l' => l'
-    end.
+Lemma rev_forallb (A : Type) P (l : list A):
+  forallb P (rev l) =  forallb P l.
+Proof. 
+  induction l as [| a l IHl]; [reflexivity|].
+  cbn.
+  rewrite forallb_app, IHl.
+  cbn.
+  now rewrite andb_true_r, andb_comm.
+Qed.
 
-  Lemma rev_forallb (A : Type) P (l : list A):
-    forallb P (rev l) =  forallb P l.
-  Proof. 
-    induction l as [| a l IHl]; [reflexivity|].
-    cbn.
-    rewrite forallb_app, IHl.
-    cbn.
-    now rewrite andb_true_r, andb_comm.
-  Qed.
+Lemma leading_false_spec v1 : exists n, (exists l, v1 = repeat false n ++ true :: l) \/ v1 = repeat false n.
+Proof.
+  induction v1 as [| a l IHv1]; [exists 0; now right |].
+  destruct IHv1 as [n [IHv1 | IHv1]]; [destruct IHv1 as [l' IHv1]|]; subst.
+  - destruct a; [exists 0 | exists (S n)]; left; eexists _; now reflexivity.
+  - destruct a.
+      + exists 0. left. eexists _. now reflexivity.
+      + exists (S n). right. now reflexivity.
+Qed.
 
-  Lemma leading_false_spec v1 : exists n, (exists l, v1 = repeat false n ++ true :: l) \/ v1 = repeat false n.
-  Proof.
-    induction v1 as [| a l IHv1]; [exists 0; now right |].
-    destruct IHv1 as [n [IHv1 | IHv1]]; [destruct IHv1 as [l' IHv1]|]; subst.
-    - destruct a; [exists 0 | exists (S n)]; left; eexists _; now reflexivity.
-    - destruct a.
-        + exists 0. left. eexists _. now reflexivity.
-        + exists (S n). right. now reflexivity.
-  Qed.
-
-  Lemma remove_leading_falses_spec_false_only n :
+Lemma remove_leading_falses_spec_false_only n :
   remove_leading_falses (repeat false n) = [].
-  Proof.
-    induction n as [| ? IHn]; [reflexivity | apply IHn].
-  Qed.
+Proof.
+  induction n as [| ? IHn]; [reflexivity | apply IHn].
+Qed.
 
-  Lemma remove_leading_falses_dist (l l1 :list bool) : remove_leading_falses (l ++ true :: l1) = remove_leading_falses l ++ true :: l1.
-  Proof.
+Lemma remove_leading_falses_dist (l l1 :list bool) : 
+  remove_leading_falses (l ++ true :: l1) = remove_leading_falses l ++ true :: l1.
+Proof.
   induction l as [| a ? IHl]; [reflexivity|].
   destruct a; [reflexivity| apply IHl].
-  Qed.
+Qed.
 
-    Lemma remove_leading_falses_spec l n :
+Lemma remove_leading_falses_spec l n :
   remove_leading_falses (repeat false n ++ true :: l) = true :: l.
-  Proof.
-    now rewrite remove_leading_falses_dist, remove_leading_falses_spec_false_only.
-  Qed.
+Proof.
+  now rewrite remove_leading_falses_dist, remove_leading_falses_spec_false_only.
+Qed.
 
-  Lemma true_not_repeat_false x x0 :
-    forallb negb (repeat false x ++ true :: x0) = false.
-  Proof.
+Lemma true_not_repeat_false x x0 :
+  forallb negb (repeat false x ++ true :: x0) = false.
+Proof.
   rewrite forallb_app.
   now destruct (forallb negb (repeat false x)).
-  Qed.
+Qed.
 
-  Lemma repeat_forallb n :
-    forallb negb (repeat false n) = true.
-  Proof.
-    induction n as [| ? IHn]; [reflexivity|cbn; apply IHn].
-  Qed.
+Lemma repeat_forallb n :
+  forallb negb (repeat false n) = true.
+Proof.
+  induction n as [| ? IHn]; [reflexivity|cbn; apply IHn].
+Qed.
 
-
-  (* A single instruction is a subprogram of the full program *)
+(* A single instruction from a program is a subprogram of the full program *)
 Lemma sc_spec n i j (P : list (bsm_instr n)) x :
   in_code j (i, P) ->
   nth_error P (j - i) = Some x ->
@@ -380,12 +360,27 @@ Proof.
     now rewrite Nat.add_comm, Nat.add_sub.
 Qed.
 
+(* BSM cast definition and lemmas *)
+Definition BSM_cast {n} (P : list (bsm_instr n)) {m} (E : n = m) : list (bsm_instr m).
+Proof. subst m. exact P. Defined.
 
-(* SBTM simulation *)
+Lemma BSM_cast_length {n} (P : list (bsm_instr n)) {m} (E : n = m) :
+  length (BSM_cast P E) = length P.
+Proof.
+  destruct E. cbn. reflexivity.
+Qed.
+
+Lemma BSM_cast_spec {n m} i (P : list (bsm_instr n)) (E : n = m) j v k w :
+   sss.sss_compute (@bsm_sss _) (i, P) (j, v) (k, w) <-> sss.sss_compute (@bsm_sss _) (i, BSM_cast P E) (j, Vector.cast v E) (k, Vector.cast w E).
+Proof.
+  destruct E. cbn. now rewrite !cast_eq_refl.
+Qed.
+
+
+(* ---SBTM Simulation--- *)
 
 Definition complete_encode (Σ : finType) n (t : Vector.t (tape Σ) n) : SBTMNotations.tape:=
   HaltTM_1_to_SBTM_HALT.encode_tape ((encode_tape' (Vector.nth (mTM_to_TM.enc_tape [] t) Fin0))).
-
 
 Lemma SBTM_complete_simulation n Σ (M : TM Σ n) :
   {M' : SBTM &
@@ -414,7 +409,8 @@ Proof.
     apply H.
 Qed.
 
-(* Extend BSM *)
+
+(* ---Extend BSM--- *)
 
 (* Lift instructions to more stacks *)
 Definition bsm_addstracks' n m (P : bsm_instr n) : (bsm_instr (m + n)) :=
@@ -422,13 +418,12 @@ Definition bsm_addstracks' n m (P : bsm_instr n) : (bsm_instr (m + n)) :=
   | bsm_pop x c1 c2 => bsm_pop (pos_right m x) c1 c2
   | bsm_push x b => bsm_push (pos_right m x) b end) P.
 
-(* For lists *)
 Definition bsm_addstacks n m (P : list (bsm_instr n)) : list (bsm_instr (m + n)):=
 map (@bsm_addstracks' n m) P.
 
 Unset Mangle Names.
 
-(* Steps can be lifted to more stacks *)
+(* Lift single step *)
 Lemma BSM_addstacks_step n m (P : bsm_instr n) j v o v' v'' :
    (bsm_sss P (j, v) (o, v') <-> bsm_sss (@bsm_addstracks' n m P) (j, vec_app v'' v) (o, vec_app v'' v')).
 Proof.
@@ -453,8 +448,6 @@ Proof.
   1: econstructor 4. f_equal. rewrite vec_change_app_right, vec_pos_app_right in H6. now eapply vec_app_inj in H6 as ->.
 Qed.
 
-
-(* If lifted step, then unlifted step*)
 Lemma BSM_addstacks_step_bwd n m (P : bsm_instr n) j v out v'' :
    bsm_sss (@bsm_addstracks' n m P) (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ bsm_sss P (j, v) (o, v').
 Proof.
@@ -470,7 +463,6 @@ Proof.
     rewrite vec_pos_app_right. econstructor 4.
 Qed.
 
-(* sss_step also for lifted stacks *)
 Lemma BSM_addstacks_step' n i (P : list (bsm_instr n)) m j v o v' v'' :
   sss_step (bsm_sss (n := n)) (i, P) (j, v) (o, v') -> sss_step (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) (o, vec_app v'' v').
 Proof.
@@ -480,7 +472,6 @@ Proof.
   now apply BSM_addstacks_step.
 Qed.
 
-(* if sss_step lifted is valid, then unlifted sss_step is also valid*)
 Lemma BSM_addstacks_step_bwd' n i (P : list (bsm_instr n)) m j v v'' out :
   sss_step (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_step (bsm_sss (n := n)) (i, P) (j, v) (o, v').
 Proof.
@@ -515,6 +506,8 @@ Proof.
 Qed.
 
 Set Mangle Names.
+
+(* Use sss_compute instead of sss_steps*)
 Lemma BSM_addstacks'' n i (P : list (bsm_instr n)) m j v o v' v'' :
   sss_compute (bsm_sss (n := n)) (i, P) (j, v) (o, v') -> sss_compute (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) (o, vec_app v'' v').
 Proof.
@@ -537,10 +530,6 @@ Proof.
     repeat eexists. econstructor.  1: eauto. eauto.
 Qed.
 
-(* For each Programm P nat m there is a lifted Programm P' that
-    - length equal
-    - states behave the same
-    *)
 Lemma BSM_addstacks n i (P : list (bsm_instr n)) m :
    {P' | length P = length P' /\ (forall j v o v', BSM.eval n (i, P) (j, v) (o, v') -> forall v'', BSM.eval (m + n) (i, P') (j, Vector.append v'' v) (o, Vector.append v'' v'))
           /\ forall v v'' j out, BSM.eval (m + n) (i, P') (j, Vector.append v'' v) out -> exists out, BSM.eval n (i, P) (j, v) out}.
@@ -558,6 +547,8 @@ Proof.
 Qed.
 
 Set Mangle Names.
+
+(* Lifting a program does not change length *)
 Lemma bsm_length m n (P : list (bsm_instr n)):
   length (bsm_addstacks m P) = length P.
 Proof.
@@ -566,9 +557,15 @@ Proof.
     now rewrite length_map.
 Qed.
 
-(* BSM encoding *)
+(* ---BSM encoding--- *)
 
-(* Encode tape vector on 5 BSM stacks. First and last stack are empty. Truncation is performed. *)
+(* Encode tape vector on 5 BSM stacks.
+   0: Truncation stack
+   1: left of the current symbol
+   2: current symbol
+   3: right of the current symbol
+   5: Unconditional jump stack
+ *)
 Definition encode_bsm (Σ : finType) n (t : Vector.t (tape Σ) n) :=
 let t' := (SBTM_facts.truncate_tape (complete_encode t)) in 
 let t'' := (SBTM_HALT_to_HaltBSM.encode_tape t') in
@@ -601,26 +598,26 @@ Proof.
       now rewrite IHl1.
 Qed.
 
-(* Reverse, remove false prefix, reverse does the same as truncate*)
+(* Reverse, remove false prefix, reverse does the same as truncate function*)
 Lemma trunc_spec l:
   rev (remove_leading_falses (rev l)) = SBTM_facts.truncate l.
-  Proof.
-   induction l as [| a l IHl]; [ now reflexivity |].
-   destruct a; cbn; [now rewrite <- IHl, remove_leading_falses_dist, rev_unit |].
-   destruct (leading_false_spec (rev l)) as [x [[x0 H] | H]].
-    - rewrite H in IHl.
-      rewrite H, <- app_assoc, <- app_comm_cons, remove_leading_falses_dist, <- IHl.
-      assert (E := true_not_repeat_false x x0).
-      rewrite <- rev_forallb in E.
-      rewrite <- H, rev_involutive in E.
-      now rewrite E, remove_leading_falses_dist, <- rev_unit, <- app_assoc, app_comm_cons.
-    - rewrite H, <- repeat_cons, <- IHl.
-      assert (H1 := repeat_forallb x).
-      rewrite <- H, rev_forallb in H1.
-      rewrite H1.
-      simpl.
-      now rewrite remove_leading_falses_spec_false_only.
-  Qed.
+Proof.
+  induction l as [| a l IHl]; [ now reflexivity |].
+  destruct a; cbn; [now rewrite <- IHl, remove_leading_falses_dist, rev_unit |].
+  destruct (leading_false_spec (rev l)) as [x [[x0 H] | H]].
+  - rewrite H in IHl.
+    rewrite H, <- app_assoc, <- app_comm_cons, remove_leading_falses_dist, <- IHl.
+    assert (E := true_not_repeat_false x x0).
+    rewrite <- rev_forallb in E.
+    rewrite <- H, rev_involutive in E.
+    now rewrite E, remove_leading_falses_dist, <- rev_unit, <- app_assoc, app_comm_cons.
+  - rewrite H, <- repeat_cons, <- IHl.
+    assert (H1 := repeat_forallb x).
+    rewrite <- H, rev_forallb in H1.
+    rewrite H1.
+    simpl.
+    now rewrite remove_leading_falses_spec_false_only.
+Qed.
         
 (* Truncate does not have an effect because encode_symbol always ends on true*)
 Lemma truncate_irrel l:
@@ -641,28 +638,22 @@ Proof.
   now rewrite truncate_irrel.
 Qed.
 
-
-(* encoded niltape is a prefix on stack 3*)
 Lemma encode_bsm_nil (Σ : finType) n   :
   { '(str2, n') | forall (t : Vector.t (tape Σ) n), (encode_bsm Σ (niltape ::: t))@[Fin3] =  str2 ++ (skipn n' ((encode_bsm Σ t)@[Fin3]))}.
 Proof.
   eexists (flat_map encode_symbol (encode_sym _ ++ true :: false :: encode_sym _ ++ true :: false :: encode_sym _), _). intros t.
-
   cbn.
   rewrite !truncate_irrel.
   rewrite !flat_map_app.
   rewrite skipn_app'; [|now rewrite encode_length, length_encode_sym]. 
   rewrite <- !flat_map_app. 
   f_equal.
-
   assert ( Hreorder : forall l1 l2 l3 l4,
   l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: l4 =
   (l1 ++ true :: false :: l2 ++ true :: false :: l3) ++ true :: l4). 
   { intros. now repeat (rewrite <- app_assoc; cbn). }
-
   apply Hreorder.
 Qed.
-
 
 (* Function definitions to improve performance*)
 Definition encoding_func' (Σ : finType)  x :=
@@ -674,7 +665,6 @@ Definition encoding_func' (Σ : finType)  x :=
 
 Definition encoding_func (Σ : finType) x :=
 encode_sym (@encoding_func' Σ x).
-
 
 Definition strpush_common_short (Σ : finType) (s b : Σ) :=
 flat_map encode_symbol ((@encoding_func Σ (inl START)) ++
@@ -745,20 +735,14 @@ Proof. reflexivity. Qed.
 Lemma encode_bsm_succ (Σ : finType) n m s b (t : Vector.t (tape Σ) n) :
       (encode_bsm Σ (encNatTM s b (S m) ::: t)) @[Fin3] = strpush_succ s b ++ (skipn (length (strpush_common_short s b)) ((encode_bsm Σ (encNatTM s b m ::: t))@[Fin3])).
 Proof.
-
   rewrite !truncate_irrel_encoding.
   rewrite <- !vec_pos_spec.
   rewrite !vec_pos_app_right.
   cbn.
-
-  set (X := map _).
-  set (Y := encode_sym _).
-
+  set (X := map _). set (Y := encode_sym _).
   replace X with (map (@encoding_func' Σ)) by reflexivity.
   replace Y with (encode_sym (@encoding_func' Σ (inl START))) by reflexivity.
-
   rewrite (encode_tapes_cons (encNatTM s b m)). cbn.
-
   assert (Happ_assoc : forall l1 l2 l3 l4 l5,
     l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4 ++ true :: l5 =
     (l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4) ++ true :: l5).
@@ -766,17 +750,14 @@ Proof.
   rewrite Happ_assoc.
   rewrite !flat_map_app.
   rewrite skipn_app'.
-
   - unfold strpush_succ, strpush_common, strpush_common_short.
     rewrite <- !flat_map_app.
     f_equal.
-
     assert( Hreorder : forall l1 l2 l3 l4 l5 l6,
     l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4 ++ true :: false :: l5 ++ true :: l6 =
     (((l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4) ++ [true; false]) ++ l5) ++ true :: l6). {
    intros. now repeat (rewrite <- app_assoc; cbn). }
     apply Hreorder.
-
   - rewrite length_app.
     rewrite encode_length.
     rewrite length_encode_sym.
@@ -786,20 +767,14 @@ Proof.
     unfold encoding_func.
     rewrite encode_length.
     now rewrite length_encode_sym.
-Time Qed.
+Qed.
 
 
-(* Truncation simulation *)
-
-From Undecidability.StackMachines Require Import BSM BSM.bsm_defs.
-
-Notation "P // s -[ k ]-> t" := (sss_steps (@bsm_sss _) P k s t).
-Notation "P // s ->> t" := (sss_compute (@bsm_sss _) P s t).
-Notation "P // s ~~> t" := (sss_output (@bsm_sss _) P s t).
+(* ---Truncation simulation--- *)
 
 Section Truncation_Construction.
 
-  (* STACK is the stack to perform truncation on *)
+  (* STACK is the stack to perform truncation on. STACK is different from the truncation and the empty stack. *)
   Context (i : nat) (STACK : Fin.t 5) (STACK_NEQ_FIN4 : STACK <> Fin4) (STACK_NEQ_FIN0 : STACK <> Fin0).
 
   Definition TRUNC_length := 12.
@@ -808,7 +783,6 @@ Section Truncation_Construction.
   (* Performs truncation on one stack *)
   #[local] Definition TRUNC : list (bsm_instr 5) :=
     let JMP := fun i => POP Fin4 i i in
-
     (* i + 0 *) POP STACK (i + 3) (i + 5) ::
     (* i + 1 *) PUSH Fin0 true ::
     (* i + 2 *) JMP (i + 0) ::
@@ -825,7 +799,7 @@ Section Truncation_Construction.
     (* i + 11 *) JMP (i + 7) :: [].
 
 
-  (* Specifies one traversal of i to (i + 4)*)
+  (* Specifies one traversal of the first loop (i to (i + 4))*)
   #[local] Lemma Truncation_first_loop_single a v v1:
     vec_pos v Fin4 = [] ->
     vec_pos v STACK = a :: v1 ->
@@ -853,7 +827,7 @@ Section Truncation_Construction.
         rewrite vec_change_neq; easy.
   Qed.
 
-  (* Specifies traversal of i to (i + 4)*)
+  (* Specifies traversal of the first loop (i to (i + 4))*)
   #[local] Lemma Truncation_first_loop v v0 v1:
     vec_pos v Fin4 = [] ->
     vec_pos v Fin0 = v0 ->
@@ -879,11 +853,11 @@ Section Truncation_Construction.
           now rewrite <- app_comm_cons.
   Qed.
 
-  (* Specifies traversal from i to (i + 5)*)
+  (* Specifies traversal from first to second loop (i to (i + 5))*)
   #[local] Lemma Truncation_first_to_second v:
-      vec_pos v Fin4 = [] ->
-      vec_pos v STACK = [] ->
-      (i, TRUNC) // (i, v) ->> (i + 5, v).
+    vec_pos v Fin4 = [] ->
+    vec_pos v STACK = [] ->
+    (i, TRUNC) // (i, v) ->> (i + 5, v).
   Proof.
     unfold TRUNC.
     intros H1 H2.
@@ -891,7 +865,7 @@ Section Truncation_Construction.
     bsm sss stop.
   Qed.
 
-  (* Specifies traversal of (i + 5) and (i + 6) if STACK contains a false prefix *)
+  (* Specifies traversal of second loop ((i + 5) and (i + 6)) if STACK contains a false prefix *)
   #[local] Lemma Truncation_second_loop_repeat_false n v v0:
     vec_pos v Fin4 = [] ->
     vec_pos v Fin0 = (repeat false n) ++ v0 ->
@@ -911,7 +885,7 @@ Section Truncation_Construction.
         * now rewrite vec_change_idem.
   Qed.
 
-  (* Specifies traversal of (i + 5) and (i + 6) if STACK starts with false *)
+  (* Specifies traversal of second loop ((i + 5) and (i + 6)) if STACK starts with true *)
   #[local] Lemma Truncation_second_loop_true v v0:
     vec_pos v Fin4 = [] ->
     vec_pos v Fin0 = true :: v0 ->
@@ -931,7 +905,7 @@ Section Truncation_Construction.
       now rewrite vec_change_same.
   Qed.
 
-  (* Specifies traversal of (i + 5) and (i + 6) if STACK is empty *)
+  (* Specifies traversal of second loop ((i + 5) and (i + 6)) if STACK is empty *)
   #[local] Lemma Truncation_second_loop_empty v:
     vec_pos v Fin0 = [] ->
     vec_pos v STACK = [] ->
@@ -944,7 +918,7 @@ Section Truncation_Construction.
     bsm sss stop.
   Qed.
 
-  (* Specifies one traversal of (i + 7) to (i + 11) *)
+  (* Specifies one traversal of third loop ((i + 7) to (i + 11)) *)
   #[local] Lemma Truncation_third_loop_single a v v0:
     vec_pos v Fin0 = a :: v0 ->
     vec_pos v Fin4 = [] ->
@@ -966,7 +940,7 @@ Section Truncation_Construction.
         now autorewrite with vec_simpl.
   Qed.
 
-  (* Specifies traversal of (i + 7) to (i + 11) *)
+  (* Specifies traversal of third loop ((i + 7) to (i + 11)) *)
   #[local] Lemma Truncation_third_loop v v0 v1:
     vec_pos v Fin4 = [] ->
     vec_pos v Fin0 = v0 ->
@@ -995,7 +969,7 @@ Section Truncation_Construction.
         now rewrite <- app_assoc.
   Qed.
 
-  (* Specifies one traversal from (i + 7) to END*)
+  (* Specifies traversal from (i + 7) to END*)
   #[local] Lemma Truncation_spec_final v:
     vec_pos v Fin4 = [] ->
     vec_pos v Fin0 = [] ->
@@ -1014,8 +988,8 @@ Section Truncation_Construction.
   Lemma Truncation_spec_END v:
     vec_pos v Fin4 = [] ->
     vec_pos v Fin0 = [] ->
-    (i, TRUNC) // (i, v) ->> (END,
-    vec_change v STACK (rev (remove_leading_falses (rev (vec_pos v STACK))))).
+    (i, TRUNC) // (i, v) ->> 
+    (END,vec_change v STACK (rev (remove_leading_falses (rev (vec_pos v STACK))))).
   Proof using STACK_NEQ_FIN0 STACK_NEQ_FIN4.
     intros I1 I2. 
     eapply sss_compute_trans.
@@ -1065,7 +1039,7 @@ End Truncation_Construction.
 Definition TRUNC_PROG i: list (bsm_instr 5) :=
   TRUNC i Fin1 ++ TRUNC (i + TRUNC_length) Fin3.
 
-(* Apply trunc to stacks 1 and 3*)
+(* Apply trunc_stacl to stacks 1 and 3*)
 Definition trunc_conf (v : vec (list bool) 5) :=
   trunc_stack Fin3 (trunc_stack Fin1 v).
   
@@ -1098,7 +1072,7 @@ Proof.
 Qed.
 
 
-(* Inverse truncation*)
+(* ---Inverse truncation--- *)
 
 (* Define inverse truncation program. To perform inverse truncation on a tape encoded by encode_bsm, one PUSH suffices. *)
 Definition INV_TRUNC_PROG := [ @PUSH 5 Fin1 false].
@@ -1107,7 +1081,9 @@ Lemma INV_TRUNC_PROG_length : | INV_TRUNC_PROG | = 1.
 Proof. now cbn. Qed.
 
 (* INV_TRUNC_PROG performs inverse truncation on a tape encoded by encode_bsm *)
-Lemma INV_TRUNC_spec (n : nat) (Σ : finType) t i: (i, INV_TRUNC_PROG) // (i, encode_bsm t) ->> (i + 1 , vec_app [|[]| ] (SBTM_HALT_to_HaltBSM.encode_tape (@complete_encode Σ n t))).
+Lemma INV_TRUNC_spec (n : nat) (Σ : finType) t i: 
+  (i, INV_TRUNC_PROG) // (i, encode_bsm t) ->> 
+  (i + 1 , vec_app [|[]|] (SBTM_HALT_to_HaltBSM.encode_tape (@complete_encode Σ n t))).
 Proof.
   unfold INV_TRUNC_PROG.
   bsm sss PUSH with Fin1 false.
@@ -1120,6 +1096,9 @@ Proof.
     lia. 
 Qed.
 
+
+(* ---Simulation Program--- *)
+
 (* Define the full simulation program. 
   1. Perform inverse truncation
   2. Program from SBTM to BSM (extended to 5 stacks)
@@ -1130,144 +1109,159 @@ Definition FULL_PROG M1 q1 i :=
                         bsm_addstacks 1 (P M1 q1 (i + 1)) ++
                         TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|)).
                         
-
-
-
 (* If a program never pushes to STACK, then STACK remains empty after a step *)
 Lemma Step_empty_spec i j n t v M M' M'' STACK:
     in_code j (i + (|M''|), M) ->
     vec_pos v STACK = [] ->
-    Forall (fun instr => match instr with 
-        | PUSH s _ => s <> STACK
-        | _ => True
-        end) M ->
-    sss_step (bsm_sss (n:=5)) 
-      (i, M''++ M ++ M') (j, v) (n, t) ->
+    Forall 
+    (fun instr => match instr with 
+                    | PUSH s _ => s <> STACK
+                    | _ => True
+                    end) M ->
+    sss_step (bsm_sss (n:=5)) (i, M''++ M ++ M') (j, v) (n, t) ->
     vec_pos t STACK = [].
-  Proof.
-    intros H H0 H1 H2.
-    assert (H3:(i + (| M'' |), M) <sc ((i, M'' ++ M ++ M'))) by auto.
-    replace j with (fst (j,v)) in H by easy.
-    assert (X := sss_step_supcode H3 H H2). clear H2 H3.
-    destruct X as [k [l [i' [r [d [H2A [H2B H2C]]]]]]].
-    injection H2A. injection H2B. intros H2 H3 H4 H5. clear H2A H2B.
-    rewrite Forall_nth in H1.
-    cbn in H.
-    destruct H as [H H6].
-    assert (H7 : j - (i + (|M''|)) < |M|) by lia.
-    assert (H8 : j - ((i + (|M''|))) = |l|) by lia.
-    specialize (H1 _ (PUSH Fin0 true) H7).
-    rewrite H8, H4 in H1.
-    rewrite app_nth2 in H1; [|lia].
-    replace ((|l|) - (|l|)) with 0 in H1 by lia.
-    cbn in H1.
-    destruct i' eqn:I; [apply (POP_empty_spec' H0 H2C)|].
-    apply PUSH_spec in H2C.
-    destruct H2C as [H2C H11].
-    rewrite H11.
-    rewrite vec_change_neq; [apply H0| easy].
-  Qed.
+Proof.
+  intros H H0 H1 H2.
+  assert (H3:(i + (| M'' |), M) <sc ((i, M'' ++ M ++ M'))) by auto.
+  replace j with (fst (j,v)) in H by easy.
+  destruct (sss_step_supcode H3 H H2) as [? [l [i' [? [? [H2A [H2B H2C]]]]]]]. clear H2 H3.
+  injection H2A. injection H2B. intros H2 H3 H4 H5. clear H2A H2B.
+  rewrite Forall_nth in H1.
+  cbn in H.
+  assert (H6 : j - (i + (|M''|)) < |M|) by lia.
+  assert (H7 : j - ((i + (|M''|))) = |l|) by lia.
+  specialize (H1 _ (PUSH Fin0 true) H6).
+  rewrite H7, H4 in H1.
+  rewrite app_nth2 in H1; [|lia].
+  replace ((|l|) - (|l|)) with 0 in H1 by lia.
+  cbn in H1.
+  destruct i' eqn:I; [apply (POP_empty_spec' H0 H2C)|].
+  apply PUSH_spec in H2C.
+  destruct H2C as [_ H2C].
+  rewrite H2C.
+  rewrite vec_change_neq; [apply H0| easy].
+Qed.
 
-(* If every jump label in a program is either inside the program or at the first label behind the program, then this holds for each program counter after performing a step *)
-  Lemma in_code_step_spec i j n t v M M' M'':
-    in_code j (i + (|M''|), M) ->
-    Forall (fun instr => match instr with 
-        | POP _ k1 k2 => (in_code k1 (i + (|M''|), M) \/
-       k1 = i + (|M''|) + (|M|)) /\ (in_code k2 (i + (|M''|), M) \/
-       k2 = i + (|M''|) + (|M|))
-        | _ => True
-        end) M ->
-    sss_step (bsm_sss (n:=5)) 
-      (i, M'' ++ M ++ M') (j, v) (n, t) ->
-    (in_code n (i + (|M''|), M) \/
-       n = i + (|M''|) + (|M|)).
-  Proof.
-    intros H H1 H2.
-    assert (H3:(i + (| M'' |), M) <sc ((i, M'' ++ M ++ M'))) by auto.
-    replace j with (fst (j,v)) in H by easy.
-    assert (X := sss_step_supcode H3 H H2). clear H2 H3.
-    destruct X as [k [l [i' [r [d [H2A [H2B H2C]]]]]]].
-    injection H2A. injection H2B. intros H2 H3 H4 H5. clear H2A H2B.
-    rewrite Forall_nth in H1.
-    cbn in H.
-    destruct H as [H H6].
-    assert (H7 : j - (i + (|M''|)) < |M|) by lia.
-    assert (H8 : j - ((i + (|M''|))) = |l|) by lia.
-    specialize (H1 _ (PUSH Fin0 true) H7).
-    rewrite H8, H4 in H1.
-    rewrite app_nth2 in H1; [|lia].
-    replace ((|l|) - (|l|)) with 0 in H1 by lia.
-    destruct i' as [ m k1 k2 | ] eqn:I.
-    + destruct (vec_pos v m) as [|b x] eqn:J;[|destruct b].
-        * apply POP_empty_spec in H2C;[|now apply J].
-          destruct H2C as [H2C _].
-          destruct H1 as [_ H1].
-          rewrite H2C.
-          rewrite <- H4 in H1.
-          apply H1.
-        * apply POP_true_spec with (v' := x) in H2C; [|now apply J].
-          destruct H2C as [H2C _].
-          rewrite H2C.
-          cbn. lia.          
-        * apply POP_false_spec with (v' := x) in H2C; [|now apply J].
-          destruct H2C as [H2C _].
-          destruct H1 as [H1 _].
-          rewrite H2C.
-          rewrite <- H4 in H1.
-          apply H1.
-      + apply PUSH_spec in H2C.
-        destruct H2C as [H2C _]. rewrite H2C.
-        cbn. lia.
-  Qed.
+(* If every jump label in a program is either inside the program or at the first label behind the program,
+then this holds for each program counter after performing a step *)
+Lemma in_code_step_spec i j n t v M M' M'':
+  in_code j (i + (|M''|), M) ->
+  Forall 
+  (fun instr => match instr with 
+                  | POP _ k1 k2 => (in_code k1 (i + (|M''|), M) \/ k1 = i + (|M''|) + (|M|)) /\
+                                  (in_code k2 (i + (|M''|), M) \/ k2 = i + (|M''|) + (|M|))
+                  | _ => True
+                  end) M ->
+  sss_step (bsm_sss (n:=5)) (i, M'' ++ M ++ M') (j, v) (n, t) ->
+  (in_code n (i + (|M''|), M) \/ n = i + (|M''|) + (|M|)).
+Proof.
+  intros H H1 H2.
+  assert (H3:(i + (| M'' |), M) <sc ((i, M'' ++ M ++ M'))) by auto.
+  replace j with (fst (j,v)) in H by easy.
+  destruct (sss_step_supcode H3 H H2) as [? [l [i' [? [? [H2A [H2B H2C]]]]]]]. clear H2 H3.
+  injection H2A. injection H2B. intros H2 H3 H4 H5. clear H2A H2B.
+  rewrite Forall_nth in H1.
+  cbn in H.
+  assert (H6 : j - (i + (|M''|)) < |M|) by lia.
+  assert (H7 : j - ((i + (|M''|))) = |l|) by lia.
+  specialize (H1 _ (PUSH Fin0 true) H6).
+  rewrite H7, H4 in H1.
+  rewrite app_nth2 in H1; [|lia].
+  replace ((|l|) - (|l|)) with 0 in H1 by lia.
+  destruct i' as [m??| ] eqn:I.
+  + destruct (vec_pos v m) as [|b x] eqn:E;[|destruct b].
+      * apply POP_empty_spec in H2C;[|now apply E].
+        destruct H2C as [H2C _].
+        destruct H1 as [_ H1].
+        rewrite H2C.
+        rewrite <- H4 in H1.
+        apply H1.
+      * apply POP_true_spec with (v' := x) in H2C; [|now apply E].
+        destruct H2C as [H2C _].
+        rewrite H2C.
+        cbn. lia.          
+      * apply POP_false_spec with (v' := x) in H2C; [|now apply E].
+        destruct H2C as [H2C _].
+        destruct H1 as [H1 _].
+        rewrite H2C.
+        rewrite <- H4 in H1.
+        apply H1.
+    + apply PUSH_spec in H2C.
+      destruct H2C as [H2C _]. rewrite H2C.
+      cbn. lia.
+Qed.
 
-
+(* k either lies within the BSM program for SBTM M1 or is the first code label behind the program*)
 Definition in_code_or_exact_end k M1 q1 i := 
   in_code k (i , bsm_addstacks 1 (P M1 q1 i)) \/
     k = i + (| bsm_addstacks 1 (P M1 q1 i) |).
 
-
 (* in_code_or_exact_end holds for each POP of PROG *)
-Lemma PROG_JMP_spec M1 q1 i x:
+Lemma PROG_JMP_spec M1 q1 i q:
   Forall (fun instr : bsm_instr 4 =>
     match bsm_addstracks' 1 instr with
-    | POP _ k1 k2 =>
-        @in_code_or_exact_end k1 M1 q1 (i + 1) /\
-        @in_code_or_exact_end k2 M1 q1 (i + 1)
-    | PUSH _ _ => True
-    end) (PROG M1 (i + 1) x).
+      | POP _ k1 k2 =>
+          @in_code_or_exact_end k1 M1 q1 (i + 1) /\
+          @in_code_or_exact_end k2 M1 q1 (i + 1)
+      | PUSH _ _ => True
+    end) (PROG M1 (i + 1) q).
 Proof.
   assert (C := c_spec).
-  assert (U := SBTM_HALT_to_HaltBSM.state_number_length M1 x).
+  assert (U := SBTM_HALT_to_HaltBSM.state_number_length M1 q).
   assert (N := SBTM_HALT_to_HaltBSM.state_map_length_spec M1).
-
-  assert (H1 : forall j, j < c -> @in_code_or_exact_end (j + encode_state M1 (i + 1) x) M1 q1 (i + 1)). {
+  assert (H1 : forall j, j < c -> @in_code_or_exact_end (j + encode_state M1 (i + 1) q) M1 q1 (i + 1)). {
     unfold in_code_or_exact_end.
     rewrite !bsm_length. cbn. rewrite length_map, length_app, length_flat_map_PROG_M. lia.
   }
-
   assert (H2 : forall j, j < 4 ->  @in_code_or_exact_end (j + (i + 1) + c * num_states M1) M1 q1 (i + 1)). {
     unfold in_code_or_exact_end.
     rewrite !bsm_length. cbn. rewrite length_map, length_app, length_flat_map_PROG_M. simpl. lia.
   }
-
   assert (H3 : forall q, (@in_code_or_exact_end (encode_state M1 (i + 1) q) M1 q1 (i + 1))). {
-    intros q. unfold in_code_or_exact_end.
+    intros q'. unfold in_code_or_exact_end.
     rewrite !bsm_length. cbn. rewrite length_map, length_app, length_flat_map_PROG_M. simpl. 
-    assert (H := state_number_length M1 q).
+    assert (H := state_number_length M1 q').
     lia.
   }
-
-  repeat apply Forall_cons; unfold bsm_addstracks', box; try destruct (trans' _ _) as [[[q?][|]]|]; try split; try apply H1; try apply H2; try apply H3; try lia.
+  repeat apply Forall_cons; unfold bsm_addstracks', box; try destruct (trans' _ _) as [[[q'?][|]]|]; try split; try apply H1; try apply H2; try apply H3; try lia.
   now apply Forall_nil.
+Qed.
+
+(* in_code_or_exact_end holds for each POP of P *)
+Lemma P_JMP_spec M1 q1 i:
+  Forall (fun instr : bsm_instr 5 =>
+    match instr with
+      | POP _ k1 k2 =>
+          in_code_or_exact_end k1 q1 (i + 1) /\
+          in_code_or_exact_end k2 q1 (i + 1)
+      | PUSH _ _ => True
+    end)
+  (bsm_addstacks 1 (P M1 q1 (i + 1))).
+Proof.
+  assert (C := c_spec).
+  assert (L := SBTM_HALT_to_HaltBSM.state_map_length_spec M1).
+  unfold P, bsm_addstacks, in_code_or_exact_end.
+  rewrite map_cons, map_app.
+  apply Forall_cons; [| apply Forall_app; split].
+  - cbn.
+    assert (H := state_number_length M1 q1).
+    rewrite length_map, length_app, length_flat_map_PROG_M.
+    lia.
+  - apply Forall_map, Forall_flat_map, Forall_nth.
+    intros.
+    apply PROG_JMP_spec.
+  - repeat apply Forall_cons; unfold bsm_addstracks';  try easy;
+      rewrite !bsm_length; cbn; rewrite length_map, length_app, length_flat_map_PROG_M; simpl; lia.
 Qed.
 
 
 (* P never pushes to STACK*)
 Lemma P_EMPTY_STACK_spec M1 q1 i:
-Forall (fun instr : bsm_instr 5 => match instr with
-| POP _ _ _ => True
-| PUSH STACK _ => STACK <> Fin4
-end) (bsm_addstacks 1 (P M1 q1 (i + 1))).
+Forall (fun instr : bsm_instr 5 => 
+  match instr with
+    | POP _ _ _ => True
+    | PUSH STACK _ => STACK <> Fin4
+  end) (bsm_addstacks 1 (P M1 q1 (i + 1))).
 Proof.
   cbn.
   rewrite map_app.
@@ -1275,127 +1269,91 @@ Proof.
   apply Forall_app.
   split; [|now repeat apply Forall_cons].
   apply Forall_map, Forall_flat_map, Forall_nth.
-  intros ? ? ?.
+  intros.
   now (repeat apply Forall_cons); cbn; try destruct (trans' _ _) as [[[??][|]]|].
 Qed.
 
-(* in_code_or_exact_end holds for each POP of P *)
-  Lemma P_JMP_spec M1 q1 i:
-  Forall (fun instr : bsm_instr 5 =>
-    match instr with
-    | POP _ k1 k2 =>
-        in_code_or_exact_end k1 q1 (i + 1) /\
-        in_code_or_exact_end k2 q1 (i + 1)
-    | PUSH _ _ => True
-    end)
-  (bsm_addstacks 1 (P M1 q1 (i + 1))).
-  Proof.
-    assert (C := c_spec).
-    assert (N := SBTM_HALT_to_HaltBSM.state_map_length_spec M1).
-    unfold P, bsm_addstacks, in_code_or_exact_end.
-    rewrite map_cons, map_app.
-    apply Forall_cons; [| apply Forall_app; split].
-    - cbn.
-      assert (H := state_number_length M1 q1).
-      rewrite length_map, length_app, length_flat_map_PROG_M.
-      lia.
-    - apply Forall_map, Forall_flat_map, Forall_nth.
-      intros ? ? ?.
-      apply PROG_JMP_spec.
-    - repeat apply Forall_cons; unfold bsm_addstracks';  try easy;
-        rewrite !bsm_length; cbn; rewrite length_map, length_app, length_flat_map_PROG_M; simpl; lia.
-  Qed.
-    
 
-  (* If we make a step from (j,v) to (n, t) in FULL_PROG and j lies within the P subprogram, then
-    1. n lies either within P or is the first code label behind P (first instruction of TRUNC)
-    2. if v[4] empty, then t[4] empty
-    *)
-  Lemma P_out_code_step_spec M1 q1 i j n t v:
-    in_code j (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) ->
-    vec_pos v Fin4 = [] ->
-    sss_step (bsm_sss (n:=5)) 
-      (i, FULL_PROG q1 i) (j, v) (n, t) ->
-      @in_code_or_exact_end n M1 q1 (i + 1) /\ 
-    vec_pos t Fin4 = [].
-  Proof.
-    intros H H0 H1.
-    split. 
-    - assert (H2 := @in_code_step_spec i j n t v ((bsm_addstacks 1
-  (P M1 q1 (i + 1)))) (TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|))) (INV_TRUNC_PROG)).
-     rewrite INV_TRUNC_PROG_length in H2.
-      assert (H3 := (P_JMP_spec q1 i)).
-      unfold in_code_or_exact_end in H3.
-      now apply (H2 H H3 H1).
-    - assert (H2 := @Step_empty_spec i j n t v ((bsm_addstacks 1
-  (P M1 q1 (i + 1)))) (TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|))) (INV_TRUNC_PROG) Fin4).
+(* If we make a step from (j,v) to (n, t) in FULL_PROG and j lies within the P subprogram, then:
+  1. n lies either within P or is the first code label behind P (first instruction of TRUNC)
+  2. if v[4] empty, then t[4] empty
+*)
+Lemma P_out_code_step_spec M1 q1 i j n t v:
+  in_code j (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) ->
+  vec_pos v Fin4 = [] ->
+  sss_step (bsm_sss (n:=5)) (i, FULL_PROG q1 i) (j, v) (n, t) ->
+  @in_code_or_exact_end n M1 q1 (i + 1) /\ vec_pos t Fin4 = [].
+Proof.
+  intros H H0 H1.
+  split. 
+  - assert (H2 := @in_code_step_spec i j n t v 
+    (bsm_addstacks 1 (P M1 q1 (i + 1))) (TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|))) INV_TRUNC_PROG).
+    rewrite INV_TRUNC_PROG_length in H2.
+    assert (H3 := P_JMP_spec q1 i).
+    unfold in_code_or_exact_end in H3.
+    now apply (H2 H H3 H1).
+  - assert (H2 := @Step_empty_spec i j n t v 
+    (bsm_addstacks 1 (P M1 q1 (i + 1))) (TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|))) INV_TRUNC_PROG Fin4).
     rewrite INV_TRUNC_PROG_length in H2.
     now apply (H2 H H0 ((P_EMPTY_STACK_spec q1 i)) H1).
-  Qed.
+Qed.
   
-  (*
-     INV_TRUNC_PROG          P             TRUNC_PROG
-    |---------------|------------------|----------------|
-                      x------------------------------------->>x
-                    (j,v)                                (out1, out2)
-                            ||
-                            \/ exists (j',v')
-
-                      x------------------->>x
-                    (j,v)                 (j',v')
-
-  (Some edge cases are not visualised here. We make use of the fact that when leaving P, we always enter TRUNCPROG.)
-  *)
-  Lemma P_out_code_spec M1 q1 i j v out1 out2 : 
-    (i, FULL_PROG q1 i) //(j, v) ~~> (out1, out2) ->
-    vec_pos v Fin4 = [] ->
-    in_code (fst (j, v)) (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) ->
-     exists j' v',(i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) // (j, v) ->> (j', v') /\ 
-     code_end (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) <= j'.
-  Proof.
-    intros [[k H] H1] Q H0.
-    revert out1 out2 v i j H Q H1 H0.
-    induction k as [|k IHk]; intros out1 out2 v i j H Q H1 H0.
-    - apply sss_steps_0_inv in H. injection H. intros H2 H3.
-      cbn in H0. rewrite <- H3 in H1.
-      destruct H1 as [H1 | H1].
-      + cbn in H1. lia.
-      + simpl in H1.
-        rewrite length_map in H0.
-        rewrite !length_app in H1.
-        rewrite (bsm_length 1) in H1.
-        lia.
-    - apply sss_steps_S_inv' in H.
-      destruct H as [[n t] [H' H'']].
-      destruct (P_out_code_step_spec H0 Q H') as [E E1].
-      assert (I : (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) <sc (i, FULL_PROG q1 i)) by (unfold FULL_PROG; auto).
-      destruct E as [E | E].
-      + specialize (IHk out1 out2 t i n H'' E1 H1 E).
-        destruct IHk as [j' [v' [[k' IHk1] IHk2]]].
-        exists j', v'.
-        split; [|apply IHk2].
-        exists (S k').
-        apply in_sss_steps_S with (st2 := (n, t)); [apply (sss_step_supcode I H0 H') | apply IHk1].
-      + exists n, t.
-        split.
-        * exists 1.
-           apply sss_steps_1.
-           apply (sss_step_supcode I H0 H').
-        * rewrite E. constructor.
+(* If (j,v) lies withing the P subprogram and if we can go from (j, v) to output (out1, out2),
+    then we can go to (j', v') where j' is behind the code space of the P subprogram.
+    This only holds because of the way FULL_PROG is defined.
+    This is used to get from FULL_PROG to the P subprogram.
+*)
+Lemma P_out_code_spec M1 q1 i j v out1 out2 : 
+  (i, FULL_PROG q1 i) //(j, v) ~~> (out1, out2) ->
+  vec_pos v Fin4 = [] ->
+  in_code (fst (j, v)) (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) ->
+    exists j' v',(i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) // (j, v) ->> (j', v') /\ 
+    code_end (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) <= j'.
+Proof.
+  intros [[k H] H1] Q H0.
+  revert out1 out2 v i j H Q H1 H0.
+  induction k as [|k IHk]; intros out1 out2 v i j H Q H1 H0.
+  - apply sss_steps_0_inv in H. injection H. intros H2 H3.
+    cbn in H0. rewrite <- H3 in H1.
+    destruct H1 as [H1 | H1].
+    + cbn in H1. lia.
+    + simpl in H1.
+      rewrite length_map in H0.
+      rewrite !length_app in H1.
+      rewrite (bsm_length 1) in H1.
+      lia.
+  - apply sss_steps_S_inv' in H.
+    destruct H as [[n t] [H' H'']].
+    destruct (P_out_code_step_spec H0 Q H') as [E E1].
+    assert (I : (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) <sc (i, FULL_PROG q1 i)) by (unfold FULL_PROG; auto).
+    destruct E as [E | E].
+    + specialize (IHk out1 out2 t i n H'' E1 H1 E).
+      destruct IHk as [j' [v' [[k' IHk1] IHk2]]].
+      exists j', v'.
+      split; [|apply IHk2].
+      exists (S k').
+      apply in_sss_steps_S with (st2 := (n, t)); [apply (sss_step_supcode I H0 H') | apply IHk1].
+    + exists n, t.
+      split.
+      * exists 1.
+          apply sss_steps_1.
+          apply (sss_step_supcode I H0 H').
+      * rewrite E. constructor.
 Qed.
 
+(* ---BSM complete simulation--- *)
 
 (* There is a BSM over 5 stacks that simulates TM M*)
 Lemma BSM_complete_simulation'' n Σ (M : TM Σ n) i :
   { P |
       (forall q t t', TM.eval M (TM.start M) t q t' ->
       BSM.eval 5 (i, P) (i, encode_bsm t) (i + length P, encode_bsm t')) /\
-      (forall t, (exists out, BSM.eval 5 (i, P) (i, encode_bsm t) out) -> (exists q' t', TM.eval M (TM.start M) t q' t'))}.
+      (forall t, (exists out, BSM.eval 5 (i, P) (i, encode_bsm t) out) ->
+      (exists q' t', TM.eval M (TM.start M) t q' t'))}.
 Proof.
   destruct (SBTM_complete_simulation M) as (M1 & q1 & Hf1 & Hb1).
   exists (FULL_PROG q1 i).
   split.
-  
   - clear Hb1.
     intros q t t' H.
     rewrite BSM_sss.eval_iff.
@@ -1407,16 +1365,16 @@ Proof.
     apply SBTM_facts.almost_eq_truncate_tape_iff in Hf1C.
     rewrite <- Hf1C.
 
-   eapply sss_compute_trans; [| eapply sss_compute_trans].
-   + (* INV_TRUNC - INVERSE TRUNCATION, REMOVE TRUNCATE*)
+    eapply sss_compute_trans; [| eapply sss_compute_trans].
+    + (* INV_TRUNC*)
       eapply subcode_sss_compute; [| now apply INV_TRUNC_spec].
       unfold FULL_PROG, INV_TRUNC_PROG.
       apply sc_spec; [cbn; lia| now replace (i - i) with 0 by lia].
-   + (* P AND ADDSTACKS*)
+    + (* P AND ADDSTACKS*)
       eapply subcode_sss_compute; [| now apply (BSM_addstacks'' [|[]|] (SBTM_HALT_to_HaltBSM.simulation_output' _ _ _ _ _ _ _ Hf1A Hf1B))].
       eexists (INV_TRUNC_PROG), _.
       split; [now reflexivity| cbn; lia].
-   + (* TRUNC*)
+    + (* TRUNC*)
       unfold FULL_PROG.
       rewrite !length_app, bsm_length, INV_TRUNC_PROG_length, !Nat.add_assoc.
       rewrite <- trunc_order.
@@ -1431,56 +1389,51 @@ Proof.
     clear Hf1.
     apply Hb1.
     clear Hb1.
-
     destruct H as [[out1 out2] H].
     rewrite BSM_sss.eval_iff in H. 
     destruct H as [H1 H2].
-
     (* REMOVE INVERSE TRUNCATION*)
-    assert (INV : (i, FULL_PROG q1 i) // (i + 1, vec_app [|[]|](SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t))) ->> (out1, out2)) . (* deductable from H1*)
-      {
-        destruct H1 as [k H1].
-        apply sss_steps_inv in H1.
-        destruct H1 as [[H1A H1B] | [k' [[st2A st2B] [H1A [H1B H1C]]]]].
-        + injection H1B. clear H1B. intros H1B H1C.
-          assert (H : in_code i ((i, FULL_PROG q1 i))) by (simpl; lia).
-          rewrite <- H1C in H2. 
-          destruct (in_out_code H H2).
-        + apply sss_step_subcode_inv with (ii := PUSH Fin1 false) in H1B. 
-          * apply PUSH_spec in H1B.
-            destruct H1B as [H1B H1D].
-            rewrite H1B, H1D in H1C.
-            exists k'.
-            simpl.
-            rewrite <- truncate_irrel.
-            apply H1C.
-          * eexists [], _.
-            split; [now reflexivity|simpl;lia]. 
-      }
+    assert (INV : (i, FULL_PROG q1 i) // 
+            (i + 1, vec_app [|[]|](SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t))) ->> (out1, out2)).
+    {
+      destruct H1 as [k H1].
+      apply sss_steps_inv in H1.
+      destruct H1 as [[H1A H1B] | [k' [[st2A st2B] [H1A [H1B H1C]]]]].
+      + injection H1B. clear H1B. intros H1B H1C.
+        assert (H : in_code i ((i, FULL_PROG q1 i))) by (simpl; lia).
+        rewrite <- H1C in H2. 
+        destruct (in_out_code H H2).
+      + apply sss_step_subcode_inv with (ii := PUSH Fin1 false) in H1B. 
+        * apply PUSH_spec in H1B.
+          destruct H1B as [H1B H1D].
+          rewrite H1B, H1D in H1C.
+          exists k'.
+          simpl.
+          rewrite <- truncate_irrel.
+          apply H1C.
+        * eexists [], _.
+          split; [now reflexivity|simpl;lia]. 
+    }
 
-      (* i + 1 is in code of core programm P*)
-      assert (IN_CODE : in_code (fst (i + 1,  vec_app [|[]|](SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)))) (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1)))); [simpl; rewrite (bsm_length 1); lia|].
-
-      (* REMOVE TRUNCATION *)
-      destruct (P_out_code_spec (conj INV H2) eq_refl IN_CODE) as [j' [v' [[k INV1] INV2]]].
-
-      unfold code_end, fst, snd in INV2.
-      clear INV H1 IN_CODE H2.
-
-    (* BSM BWD - REMOVE ADD STACKS*)
-      destruct (@BSM_addstacks_bwd' 4 (i + 1) (P M1 q1 (i + 1)) 1 k (i + 1) (SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)) [|[]|] (j',v') INV1) as [o [v'' [BWD1 BWD2]]]. clear INV1.
-      injection BWD1. intros BWD1A BWD1B. clear BWD1.
-
+    (* i + 1 is in code of core program P*)
+    assert (IN_CODE : in_code (fst (i + 1,  vec_app [|[]|](SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)))) (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1)))); [simpl; rewrite (bsm_length 1); lia|].
+    (* REMOVE TRUNCATION *)
+    destruct (P_out_code_spec (conj INV H2) eq_refl IN_CODE) as [j' [v' [[k INV1] INV2]]].
+    unfold code_end, fst, snd in INV2.
+    clear INV H1 IN_CODE H2.
+    (* REMOVE ADD STACKS*)
+    destruct (@BSM_addstacks_bwd' 4 (i + 1) (P M1 q1 (i + 1)) 1 k (i + 1) (SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)) [|[]|] (j',v') INV1) as [o [v'' [BWD1 BWD2]]]. clear INV1.
+    injection BWD1. intros BWD1A BWD1B. clear BWD1.
     (* INV SIM*)
-      unfold code_end, fst, snd in INV2.
-      rewrite (bsm_length 1) in INV2.
-      destruct (Nat.le_exists_sub (i + 1 + (| P M1 q1 (i + 1) |)) j' INV2) as [m [LE _]].
-      rewrite Nat.add_comm in LE.
-      rewrite LE in BWD1B.
-      rewrite <- BWD1B in BWD2.
-      rewrite <- Nat.add_assoc in BWD2.
-      apply (SBTM_HALT_to_HaltBSM.inverse_simulation' M1 q1 (i + 1) (complete_encode t) k ((| P M1 q1 (i + 1)|) + m) v'' BWD2).
-      right. simpl. lia.
+    unfold code_end, fst, snd in INV2.
+    rewrite (bsm_length 1) in INV2.
+    destruct (Nat.le_exists_sub (i + 1 + (| P M1 q1 (i + 1) |)) j' INV2) as [m [LE _]].
+    rewrite Nat.add_comm in LE.
+    rewrite LE in BWD1B.
+    rewrite <- BWD1B in BWD2.
+    rewrite <- Nat.add_assoc in BWD2.
+    apply (SBTM_HALT_to_HaltBSM.inverse_simulation' M1 q1 (i + 1) (complete_encode t) k ((| P M1 q1 (i + 1)|) + m) v'' BWD2).
+    right. simpl. lia.
 Qed.
 
 (* Lift simulation to m + 5 stacks*)
@@ -1504,24 +1457,21 @@ Proof.
     apply H.
 Qed.
 
-
 (* BSM simulation with sss_terminates *)
 Lemma BSM_complete_simulation n Σ (M : TM Σ n) m  i :
     { P |
       (forall q t t', TM.eval M (TM.start M) t q t' ->
        forall v'', BSM.eval (m + 5) (i, P) (i, Vector.append v'' ((encode_bsm t))) (i + length P, Vector.append v'' ((encode_bsm t')))) /\
-      (forall t v'', (sss.sss_terminates (bsm_sss (n := (m + 5))) (i, P) (i, Vector.append v'' ((encode_bsm t)))) -> (exists q' t', TM.eval M (TM.start M) t q' t'))}.
+      (forall t v'', (sss.sss_terminates (bsm_sss (n := (m + 5))) (i, P) (i, Vector.append v'' ((encode_bsm t)))) ->
+       (exists q' t', TM.eval M (TM.start M) t q' t'))}.
 Proof.
   destruct (@BSM_complete_simulation' n Σ M m i) as (P & H1 & H2).
   exists P. split; [exact H1|].
   intros t v'' ([out1 out2] & H % BSM_sss.eval_iff). eapply H2. eauto.
 Qed.
 
-Local Notation "P // s ->> t" := (sss_compute (@bsm_sss _) P s t).
 
-
-
-(* Check all possible cases of pos 4*)
+(* Check all possible cases of pos 5*)
 Lemma Fin5_cases (P : pos 5 -> Prop) :
    P Fin0 -> P Fin1 -> P Fin2 -> P Fin3 -> P Fin4 -> forall p, P p.
 Proof.
@@ -1545,12 +1495,11 @@ Proof.
       ++ push_exactly (pos_right (1 + k) Fin4) ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin4])).
   intros v.
   rewrite <- !vec_app_spec.
-  (* Keeps expression smaller *)
+  (* Keeps expressions smaller *)
   assert (H0 : forall i, @vec_pos (list bool) _ [|[]; []; []; []; []|]  i = []). {
     do 5 (intros i; apply (Fin.caseS' i); [easy| ]; clear i).
     now apply (Fin.case0).
   }
-
   eapply subcode_sss_compute_trans; 
   [| eapply (push_exactly_spec (pos_right (1 + k) Fin0) 0 ((@encode_bsm Σ _ (Vector.const niltape n))@[Fin0]))| ];
   [now auto |].
@@ -1565,17 +1514,15 @@ Proof.
   bsm sss stop. apply f_equal2. 1:rewrite !length_app; lia.
   rewrite !vec_change_app_right, !app_nil_r, vec_pos_app_right.
   reflexivity.
-Time Qed.
-
-
+Qed.
 
 (*
   encode_bsm always returns the following stacks:
-  "trunc" = []
-  "left" = [false]
-  "curr" = [true]
-  "right" = "curr" of encode_bsm (no further specification)
-  "empty" = []
+  0 = []
+  1 = [false]
+  2 = [true]
+  3: no further specification
+  4 = []
 *)
 Lemma encode_bsm_ext Σ n v :
   @encode_bsm Σ n v = [] ::: [] ::: [true] ::: ((encode_bsm v)@[Fin3]) ::: [] ::: vec_nil.
@@ -1591,19 +1538,20 @@ Qed.
 Opaque encode_bsm.
 
 Lemma PREP2_spec'' k (Σ : finType) (x : pos k) i s b :
-{ PREP2 : list (bsm_instr ((1 + k) + 5)) | length PREP2 = 2 + (length (strpush_common_short s b)) + length ((strpush_succ s b)) /\
-forall v : Vector.t (list bool) k,  forall n, forall t : Vector.t (tape Σ) n, forall m m',
-   v @[x] = repeat true m ->
-    (i, PREP2) // (i,                Vector.append ([] ::: v) ((@encode_bsm Σ _ (encNatTM s b m' ::: t)))) ->>
-                  (i + length PREP2, Vector.append ([] ::: vec_change v x nil) ((@encode_bsm Σ _ (encNatTM s b (m + m') ::: t)))) }.
+{ PREP2 : list (bsm_instr ((1 + k) + 5)) | 
+  length PREP2 = 2 + (length (strpush_common_short s b)) + length ((strpush_succ s b)) /\
+  forall v : Vector.t (list bool) k,  forall n, forall t : Vector.t (tape Σ) n, forall m m',
+    v @[x] = repeat true m ->
+      (i, PREP2) // (i,                Vector.append ([] ::: v) ((@encode_bsm Σ _ (encNatTM s b m' ::: t)))) ->>
+                    (i + length PREP2, Vector.append ([] ::: vec_change v x nil) ((@encode_bsm Σ _ (encNatTM s b (m + m') ::: t)))) }.
 Proof.
   exists (
         POP (pos_left 5 (pos_right 1 x)) 0 (i + 2 + (length (strpush_common_short s b)) + length ((strpush_succ s b)))
         :: pop_many (pos_right (1 + k) Fin3) (length (strpush_common_short s b)) (1 + i) 
         ++ push_exactly (pos_right (1 + k) Fin3) (strpush_succ s b)
         ++ POP (pos_left 5 Fin0) 0 i
-        :: nil
-       ). split.
+        :: nil).
+  split.
   { cbn. rewrite !length_app. cbn. rewrite pop_many_length, push_exactly_length. lia. }
   intros v n t m m' Hx.
   induction m in v, m', Hx |- *.
@@ -1642,11 +1590,12 @@ Qed.
 Definition PREP2''_length (Σ : finType) (s b : Σ) := proj1_sig (encode_bsm_zero s b) + length (strpush_zero s b) + 2 + (length (strpush_common_short s b)) + length ((strpush_succ s b)).
 
 Lemma PREP2_spec' k (Σ : finType) (x : pos k) i s b n :
-{ PREP2 : list (bsm_instr ((1 + k) + 5)) | length PREP2 = PREP2''_length s b  /\
-forall v : Vector.t (list bool) k, forall t : Vector.t (tape Σ) n, forall m,
-   v @[x] = repeat true m ->
-    (i, PREP2) // (i,                Vector.append ([] ::: v) ((@encode_bsm Σ _ t))) ->>
-                  (i + length PREP2, Vector.append ([] ::: vec_change v x nil) ((@encode_bsm Σ _ (encNatTM s b m ::: t)))) }.
+{ PREP2 : list (bsm_instr ((1 + k) + 5)) | 
+  length PREP2 = PREP2''_length s b  /\
+  forall v : Vector.t (list bool) k, forall t : Vector.t (tape Σ) n, forall m,
+    v @[x] = repeat true m ->
+      (i, PREP2) // (i,                Vector.append ([] ::: v) ((@encode_bsm Σ _ t))) ->>
+                    (i + length PREP2, Vector.append ([] ::: vec_change v x nil) ((@encode_bsm Σ _ (encNatTM s b m ::: t)))) }.
 Proof.
   unfold PREP2''_length.
   destruct (encode_bsm_zero s b) as [n' Hn'].
@@ -1654,8 +1603,8 @@ Proof.
   exists (
       pop_many (pos_right (1 + k) Fin3) n' i
        ++ push_exactly (pos_right (1 + k) Fin3) (strpush_zero s b)
-       ++ PREP2
-       ). split.
+       ++ PREP2).
+  split.
   {  cbn. rewrite !length_app, pop_many_length, push_exactly_length. cbn in Hl2. lia. }
   intros v t m Hm.
   eapply subcode_sss_compute_trans. 2: eapply (pop_many_spec (pos_right (1 + k) Fin3) n' i). 1:auto.
@@ -1679,24 +1628,6 @@ Proof.
   now rewrite !length_app, pop_many_length, push_exactly_length, !Nat.add_assoc.
 Qed.
 
-(* Length of bsm_instr can be cast *)
-Definition BSM_cast {n} (P : list (bsm_instr n)) {m} (E : n = m) : list (bsm_instr m).
-Proof. subst m. exact P. Defined.
-
-(* Lenght after cast is the same *)
-Lemma BSM_cast_length {n} (P : list (bsm_instr n)) {m} (E : n = m) :
-  length (BSM_cast P E) = length P.
-Proof.
-  destruct E. cbn. reflexivity.
-Qed.
-
-(* Cast does not change evaluation *)
-Lemma BSM_cast_spec {n m} i (P : list (bsm_instr n)) (E : n = m) j v k w :
-   sss.sss_compute (@bsm_sss _) (i, P) (j, v) (k, w) <-> sss.sss_compute (@bsm_sss _) (i, BSM_cast P E) (j, Vector.cast v E) (k, Vector.cast w E).
-Proof.
-  destruct E. cbn. now rewrite !cast_eq_refl.
-Qed.
-
 Fixpoint PREP2' (Σ : finType) (s b : Σ) k'' (k' : nat)  (i : nat) (n : nat) : list (bsm_instr ((1 + (k' + k'') + 5))).
 Proof.
   destruct k'.
@@ -1717,12 +1648,9 @@ Qed.
 
 Notation "v1 +++ v2" := (Vector.append v1 v2) (at level 60).
 
-(*
-  if vec_lists are the same, encoded vec_lists are also the same
-*)
 Lemma vec_list_encode_bsm Σ n1 n2 v1 v2 :
-vec_list v1 = vec_list v2 ->
- vec_list (@encode_bsm Σ n1 v1) = vec_list (@encode_bsm Σ n2 v2).
+  vec_list v1 = vec_list v2 ->
+  vec_list (@encode_bsm Σ n1 v1) = vec_list (@encode_bsm Σ n2 v2).
 Proof.
   intros H.
   assert (n1 = n2).  1: eapply (f_equal (@length _)) in H.  1: rewrite !vec_list_length in H.  1: assumption.
@@ -1731,8 +1659,8 @@ Qed.
 
 Lemma PREP2_spec_strong (Σ : finType) i s b k' k'' v (v' : Vector.t nat k'') n (t : Vector.t (tape Σ) n) :
     (i, @PREP2' Σ s b k'' k'  i n) //
-        (i,                                            ([] ::: Vector.map (fun n => repeat true n) v +++ Vector.const [] k'') +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) v' +++ t))) ->>
-        (i + length(@PREP2' Σ s b k'' k' i n), ([] ::: Vector.const [] (k' + k'')  +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) (v +++ v') +++ t)))).
+    (i,                                    ([] ::: Vector.map (fun n => repeat true n) v +++ Vector.const [] k'') +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) v' +++ t))) ->>
+    (i + length(@PREP2' Σ s b k'' k' i n), ([] ::: Vector.const [] (k' + k'')  +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) (v +++ v') +++ t)))).
 Proof.
   induction k' in k'', v, v', i |- *.
   - cbn. bsm sss stop. f_equal.  1: lia. f_equal. revert v. apply (Vector.case0). reflexivity.
@@ -1775,34 +1703,33 @@ Proof.
       rewrite !vec_list_cast, vec_list_vec_app. cbn. simpl_list. reflexivity.
     + eapply vec_list_inj. rewrite <- !vec_map_spec, <- !vec_app_spec. cbn [vec_list].
       rewrite !vec_list_cast.
-       pose proof (@vec_list_vec_app (list bool) (S (k' + k'')) 5). cbn [plus] in H. rewrite !H. clear H.
-       pose proof (@vec_list_vec_app (list bool) (S (k' + S k'')) 5). cbn [plus] in H. rewrite !H. clear H.
-       cbn [vec_list app].
-       f_equal.
-       rewrite !vec_list_vec_app.
-       cbn [Vector.map]. rewrite vec_app_cons. f_equal. 2:{
+      pose proof (@vec_list_vec_app (list bool) (S (k' + k'')) 5). cbn [plus] in H. rewrite !H. clear H.
+      pose proof (@vec_list_vec_app (list bool) (S (k' + S k'')) 5). cbn [plus] in H. rewrite !H. clear H.
+      cbn [vec_list app].
+      f_equal.
+      rewrite !vec_list_vec_app.
+      cbn [Vector.map]. rewrite vec_app_cons. f_equal. 2:{
       cbn.
       rewrite Hv, <- vec_pos_spec.
       repeat f_equal.
       eapply nth_error_vec_list.
-       rewrite vec_list_cast, <- vec_app_spec, vec_list_vec_app, nth_error_app2; rewrite !vec_list_length, ?Nat.sub_diag; try lia.
-       reflexivity. }
-       rewrite vec_list_vec_change.
-       pose proof (@vec_list_vec_app (list bool) (S k') k''). cbn [plus] in H. rewrite !H. clear H.
-       setoid_rewrite <- vec_map_spec.
-       rewrite !vec_list_vec_map, !vec_list_const.
-       rewrite update_app_left. 2: rewrite Fin.to_nat_of_nat; cbn; rewrite length_map, vec_list_length; lia.
-       subst v. rewrite vec_list_cast. rewrite <- vec_app_spec. rewrite vec_list_vec_app. cbn [vec_list]. rewrite Fin.to_nat_of_nat. cbn.
-       rewrite map_app, update_app_right.  2: rewrite length_map, vec_list_length; lia.
-       rewrite length_map, vec_list_length, Nat.sub_diag. cbn. now simpl_list.
-       
+      rewrite vec_list_cast, <- vec_app_spec, vec_list_vec_app, nth_error_app2; rewrite !vec_list_length, ?Nat.sub_diag; try lia.
+      reflexivity. }
+      rewrite vec_list_vec_change.
+      pose proof (@vec_list_vec_app (list bool) (S k') k''). cbn [plus] in H. rewrite !H. clear H.
+      setoid_rewrite <- vec_map_spec.
+      rewrite !vec_list_vec_map, !vec_list_const.
+      rewrite update_app_left. 2: rewrite Fin.to_nat_of_nat; cbn; rewrite length_map, vec_list_length; lia.
+      subst v. rewrite vec_list_cast. rewrite <- vec_app_spec. rewrite vec_list_vec_app. cbn [vec_list]. rewrite Fin.to_nat_of_nat. cbn.
+      rewrite map_app, update_app_right.  2: rewrite length_map, vec_list_length; lia.
+      rewrite length_map, vec_list_length, Nat.sub_diag. cbn. now simpl_list.
 Qed.
 
 Lemma PREP2_spec k (Σ : finType) i s b  n :
   { PREP2 | forall v (t : Vector.t (tape Σ) n),
     (i, PREP2) //
-        (i,                               ([] ::: Vector.map (fun n => repeat true n) v) +++  (@encode_bsm Σ _ t)) ->>
-        (i + length PREP2, ([] ::: Vector.const [] k                      +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) v +++ t)))) }.
+    (i,                ([] ::: Vector.map (fun n => repeat true n) v) +++  (@encode_bsm Σ _ t)) ->>
+    (i + length PREP2, ([] ::: Vector.const [] k                      +++  (@encode_bsm Σ _ (Vector.map (encNatTM s b) v +++ t)))) }.
 Proof.
   unshelve eexists (BSM_cast (@PREP2' Σ s b 0 k  i n) _).  1: abstract lia. intros v t.
   match goal with [ |- sss_compute _ _ (_, ?st) _ ] => evar (ev : vec (list bool) (S k + 5)); enough (st = ev) as ->; subst ev end.
@@ -1847,7 +1774,7 @@ Qed.
 Lemma PREP_spec k n Σ s b :
   { PREP | forall v : Vector.t nat k,
     (0, PREP) // (0, Vector.append ([] ::: Vector.map (fun n0 : nat => repeat true n0) v) (Vector.const [] 5)) ->>
-                                           (length PREP, Vector.append (Vector.const [] (1 + k)) ((@encode_bsm Σ _ (Vector.append (niltape ::: Vector.map (encNatTM s b) v)
+                 (length PREP, Vector.append (Vector.const [] (1 + k)) ((@encode_bsm Σ _ (Vector.append (niltape ::: Vector.map (encNatTM s b) v)
                                            (Vector.const niltape n)))))
   }.
 Proof.
@@ -1862,8 +1789,6 @@ Proof.
   bsm sss stop. f_equal. rewrite !length_app. now rewrite Nat.add_assoc.
 Qed.
 
-
-(* Two skips can be combined *)
 Lemma skipn_plus n m {X} (l : list X) : skipn n (skipn m l) = skipn (n + m) l.
 Proof.
   induction m in n, l |- *.
@@ -1871,26 +1796,22 @@ Proof.
   - cbn. destruct l.  1: cbn.  1: destruct n; reflexivity. rewrite IHm. now replace (n + S m) with (S n + m) by lia.
 Qed.
 
-(* If change index lies within second vector, you can call just that *)
 Lemma vec'_change_app_right {X : Type} (n m : nat) (v1 : vec X n) (v2 : vec X m)  (p : pos m) (x : X) :
   vec_change (v1 +++ v2) (pos_right n p) x = v1 +++ (vec_change v2 p x).
 Proof. rewrite <- !vec_app_spec. apply vec_change_app_right. Qed.
 
-(* If vec_pos lies within second vector, you can call just that *)
 Lemma vec'_pos_app_right {X : Type} (n m : nat) (v : vec X n) (w : vec X m) (i : pos m) :
   vec_pos (v +++ w) (pos_right n i) = vec_pos w i.
 Proof. rewrite <- !vec_app_spec. apply vec_pos_app_right. Qed.
 
-
- Lemma flat_map_encode_symbol_inj v1 v2 :
+Lemma flat_map_encode_symbol_inj v1 v2 :
   flat_map encode_symbol v1 = flat_map encode_symbol v2 -> v1 = v2.
- Proof.
+Proof.
   revert v2.
-  induction v1 as [| a l1]; intros v2 H; destruct v2 as [| b l2]; [easy| inversion H | inversion H|]; destruct a,b; [|inversion H|inversion H|].
-  all: f_equal; apply IHl1; cbn in H; injection H; easy.
-  Qed.
+  induction v1 as [| a l1]; intros v2 H; destruct v2 as [| b l2]; [easy| inversion H | inversion H|]; destruct a,b; [|inversion H|inversion H|];
+  f_equal; apply IHl1; cbn in H; injection H; easy.
+Qed.
   
-
 Transparent encoding_func.
 
 Lemma POSTP_spec' k n (Σ : finType) s b i :
@@ -1899,14 +1820,12 @@ Lemma POSTP_spec' k n (Σ : finType) s b i :
                  (i + length POSTP, Vector.append (repeat true (m + m') ## v) (out ))
   }.
 Proof.
-  pose (THESYM := flat_map encode_symbol (
-    encoding_func ((inr (sigList_X (EncodeTapes.UnmarkedSymbol s)))))).
+  pose (THESYM := flat_map encode_symbol (encoding_func ((inr (sigList_X (EncodeTapes.UnmarkedSymbol s)))))).
   exists (
       pop_exactly (pos_right (1 + k) Fin3) (pos_right (1 + k) Fin4) (i + 6 + 2 * length THESYM) THESYM i
       ++  PUSH (pos_left 5 Fin0) true
       ::  pop_many (pos_right (1 + k) Fin3) 4 (i + 1 + 2 * length THESYM)
-      ++  POP (pos_right (1 + k) Fin0) i i :: nil 
-      ).
+      ++  POP (pos_right (1 + k) Fin0) i i :: nil).
 
   assert (ENC : forall v, | flat_map encode_symbol v | = 2 * (|v|)). {
     induction v as [| a l]; [cbn; lia|].
@@ -1916,7 +1835,6 @@ Proof.
     rewrite !Nat.add_0_r, <- Nat.add_succ_r, <- Nat.add_succ_l.
     reflexivity.
   }
-
   intros.
   induction m in i, m' |- *.
   - pose proof (encode_bsm_zero s b) as [n' Hn'].
@@ -1930,15 +1848,15 @@ Proof.
     2:{ apply vec'_pos_app_right. }
        rewrite vec'_pos_app_right. cbn.
     intros (l' & Hneq).
-     unfold THESYM in Hneq. eapply utils_list.list_app_inj in Hneq as [].
-     2: 
-     unfold encoding_func; 
-     repeat rewrite ENC; now rewrite !length_encode_sym.
-     unfold encoding_func, encoding_func' in H.
-      eapply flat_map_encode_symbol_inj in H.
-      eapply encode_sym_inj in H.
-     clear - H. destruct FinTypes.finite_n as [? [f H']]; cbn in *.
-     destruct H' as [g [_ H2]]. eapply (f_equal g) in H. now rewrite !H2 in H.
+    unfold THESYM in Hneq. eapply utils_list.list_app_inj in Hneq as [].
+    2: 
+    unfold encoding_func; 
+    repeat rewrite ENC; now rewrite !length_encode_sym.
+    unfold encoding_func, encoding_func' in H.
+    eapply flat_map_encode_symbol_inj in H.
+    eapply encode_sym_inj in H.
+    clear - H. destruct FinTypes.finite_n as [? [f H']]; cbn in *.
+    destruct H' as [g [_ H2]]. eapply (f_equal g) in H. now rewrite !H2 in H.
   - edestruct IHm as [out IH]. eexists.
     rewrite encode_bsm_succ. unfold strpush_succ. fold THESYM. rewrite <- !app_assoc.
     rewrite skipn_app' by reflexivity.
@@ -1958,8 +1876,6 @@ Proof.
     cbn [vec_pos pos_S_inv]. rewrite skipn_plus.
     bsm sss POP empty with (pos_right (1 + k) Fin0) i i.  1: eexists (_ ++ _ :: _), [].  1: split.  1: rewrite app_nil_r.  1: simpl_list.  1: reflexivity.  1: rewrite length_app, pop_exactly_length.
     1: cbn.  1: lia.  1: now rewrite vec_pos_app_right.
-    
-
     match goal with [ |- sss_compute _ _ (_, ?st) _ ] => evar (ev : Vector.t (list bool) ((1 + k) + 5)); enough (st = ev) as ->; subst ev end.
     1: match goal with [ |- sss_compute _ _ (_, _) (_, ?st) ] => evar (ev : Vector.t (list bool) ((1 + k) + 5)); enough (st = ev) as ->; subst ev end.
     1: eapply IH.  1: instantiate (1 := S m').  1: replace (m + S m') with (S (m + m')).  1: cbn [repeat plus].  1: rewrite vec_app_cons.
@@ -1973,13 +1889,12 @@ Qed.
 Lemma POSTP_spec k n (Σ : finType) s b i :
   { POSTP | forall v : Vector.t _ k, forall t : Vector.t (tape Σ) (k + n), forall m, exists out,
    (i, POSTP) // (i, Vector.append ([] ## v) ((encode_bsm (encNatTM s b m ## t)))) ->>
-                                            (i + length POSTP, Vector.append (repeat true m ## v) (out ))
+                 (i + length POSTP, Vector.append (repeat true m ## v) (out ))
   }.
 Proof.
   destruct (@POSTP_spec' k n Σ s b (i + (length (strpush_common s b)))) as [POSTP HPOST].
   specialize HPOST with (m' := 0).
-  exists (pop_many (pos_right (1 + k) Fin3) (length (strpush_common s b)) i
-      ++  POSTP).
+  exists (pop_many (pos_right (1 + k) Fin3) (length (strpush_common s b)) i ++ POSTP).
   intros v t m. specialize HPOST with (m := m).
   edestruct (HPOST v) as (out & HPOST').
   exists out.

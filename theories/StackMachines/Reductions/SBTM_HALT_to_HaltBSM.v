@@ -105,6 +105,23 @@ Section Construction.
     by rewrite IH; [|lia].
   Qed.
 
+  Lemma state_map_length_spec M1 : length (all_fins (num_states M1)) = num_states M1.
+  Proof.
+    induction (num_states M1) as [| n IHn];[reflexivity|].
+    cbn. 
+    rewrite length_map.
+    now rewrite IHn.
+  Qed.
+
+  Lemma state_number_length M1 (q1 : SBTMNotations.state M1) :
+    proj1_sig (Fin.to_nat q1) < length (all_fins (num_states M1)).
+  Proof.
+    unfold proj1_sig.
+    destruct (Fin.to_nat q1) as [n H].
+    rewrite state_map_length_spec.
+    apply H.
+  Qed.
+
   Lemma P_length : length P = 5 + num_states M * c.
   Proof.
     rewrite /= length_app /= length_flat_map_PROG_M. lia.

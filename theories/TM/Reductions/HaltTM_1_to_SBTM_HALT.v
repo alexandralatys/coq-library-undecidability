@@ -15,7 +15,6 @@ Set Default Goal Selector "!".
 
 Module SBTM_facts.
 
-  (* TODO move almost_eq and almost_eq_tape Lemmas to SBTM_facts *)
   Lemma almost_eq_elim l1 l2 :
     almost_eq l1 l2 -> 
     match l1 with

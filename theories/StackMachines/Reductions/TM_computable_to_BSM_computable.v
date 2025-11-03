@@ -1,5 +1,4 @@
 Set Default Goal Selector "!".
-Set Mangle Names.
 
 Require Import 
   Undecidability.StackMachines.BSM Undecidability.StackMachines.Util.BSM_computable
@@ -421,8 +420,6 @@ Definition bsm_addstracks' n m (P : bsm_instr n) : (bsm_instr (m + n)) :=
 Definition bsm_addstacks n m (P : list (bsm_instr n)) : list (bsm_instr (m + n)):=
 map (@bsm_addstracks' n m) P.
 
-Unset Mangle Names.
-
 (* Lift single step *)
 Lemma BSM_addstacks_step n m (P : bsm_instr n) j v o v' v'' :
    (bsm_sss P (j, v) (o, v') <-> bsm_sss (@bsm_addstracks' n m P) (j, vec_app v'' v) (o, vec_app v'' v')).
@@ -505,8 +502,6 @@ Proof.
   - destruct st2. econstructor.  1: eapply BSM_addstacks_step'.  1: exact H1. eapply IHk, H2.
 Qed.
 
-Set Mangle Names.
-
 (* Use sss_compute instead of sss_steps*)
 Lemma BSM_addstacks'' n i (P : list (bsm_instr n)) m j v o v' v'' :
   sss_compute (bsm_sss (n := n)) (i, P) (j, v) (o, v') -> sss_compute (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) (o, vec_app v'' v').
@@ -517,8 +512,6 @@ Proof.
   apply BSM_addstacks'.
   apply H.
 Qed.
-
-Unset Mangle Names.
 
 Lemma BSM_addstacks_bwd' n i (P : list (bsm_instr n)) m k j v v'' out :
   sss_steps (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) k (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_steps (bsm_sss (n := n)) (i, P) k (j, v) (o, v').
@@ -545,8 +538,6 @@ Proof.
     eexists (_, _). eapply eval_iff. split.  1: eexists.  1: eapply H0.
     cbn in *. unfold bsm_addstacks in H2. rewrite length_map in H2. exact H2.
 Qed.
-
-Set Mangle Names.
 
 (* Lifting a program does not change length *)
 Lemma bsm_length m n (P : list (bsm_instr n)):
@@ -1470,7 +1461,6 @@ Proof.
   intros t v'' ([out1 out2] & H % BSM_sss.eval_iff). eapply H2. eauto.
 Qed.
 
-
 (* Check all possible cases of pos 5*)
 Lemma Fin5_cases (P : pos 5 -> Prop) :
    P Fin0 -> P Fin1 -> P Fin2 -> P Fin3 -> P Fin4 -> forall p, P p.
@@ -1479,8 +1469,6 @@ Proof.
   repeat (intros p; eapply (Fin.caseS' p); clear p; [ eauto | ]).
   intros p. inversion p.
 Qed.
-
-Unset Mangle Names.
 
 Lemma PREP1_spec k Σ n :
 { PREP1 : list (bsm_instr ((1 + k) + 5)) | forall v : Vector.t nat k,

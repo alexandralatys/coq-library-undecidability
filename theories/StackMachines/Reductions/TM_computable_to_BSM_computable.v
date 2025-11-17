@@ -1100,38 +1100,6 @@ Definition FULL_PROG M1 q1 i :=
                         bsm_addstacks 1 (P M1 q1 (i + 1)) ++
                         TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|)).
                         
-(* If a program never pushes to STACK, then STACK remains empty after a step *)
-Lemma Step_empty_spec i j n t v M M' M'' STACK:
-    in_code j (i + (|M''|), M) ->
-    vec_pos v STACK = [] ->
-    Forall 
-    (fun instr => match instr with 
-                    | PUSH s _ => s <> STACK
-                    | _ => True
-                    end) M ->
-    sss_step (bsm_sss (n:=5)) (i, M''++ M ++ M') (j, v) (n, t) ->
-    vec_pos t STACK = [].
-Proof.
-  intros H H0 H1 H2.
-  assert (H3:(i + (| M'' |), M) <sc ((i, M'' ++ M ++ M'))) by auto.
-  replace j with (fst (j,v)) in H by easy.
-  destruct (sss_step_supcode H3 H H2) as [? [l [i' [? [? [H2A [H2B H2C]]]]]]]. clear H2 H3.
-  injection H2A. injection H2B. intros H2 H3 H4 H5. clear H2A H2B.
-  rewrite Forall_nth in H1.
-  cbn in H.
-  assert (H6 : j - (i + (|M''|)) < |M|) by lia.
-  assert (H7 : j - ((i + (|M''|))) = |l|) by lia.
-  specialize (H1 _ (PUSH Fin0 true) H6).
-  rewrite H7, H4 in H1.
-  rewrite app_nth2 in H1; [|lia].
-  replace ((|l|) - (|l|)) with 0 in H1 by lia.
-  cbn in H1.
-  destruct i' eqn:I; [apply (POP_empty_spec' H0 H2C)|].
-  apply PUSH_spec in H2C.
-  destruct H2C as [_ H2C].
-  rewrite H2C.
-  rewrite vec_change_neq; [apply H0| easy].
-Qed.
 
 (* If every jump label in a program is either inside the program or at the first label behind the program,
 then this holds for each program counter after performing a step *)
@@ -1246,47 +1214,22 @@ Proof.
 Qed.
 
 
-(* P never pushes to STACK*)
-Lemma P_EMPTY_STACK_spec M1 q1 i:
-Forall (fun instr : bsm_instr 5 => 
-  match instr with
-    | POP _ _ _ => True
-    | PUSH STACK _ => STACK <> Fin4
-  end) (bsm_addstacks 1 (P M1 q1 (i + 1))).
-Proof.
-  cbn.
-  rewrite map_app.
-  apply Forall_cons; [easy|].
-  apply Forall_app.
-  split; [|now repeat apply Forall_cons].
-  apply Forall_map, Forall_flat_map, Forall_nth.
-  intros.
-  now (repeat apply Forall_cons); cbn; try destruct (trans' _ _) as [[[??][|]]|].
-Qed.
-
-
 (* If we make a step from (j,v) to (n, t) in FULL_PROG and j lies within the P subprogram, then:
   1. n lies either within P or is the first code label behind P (first instruction of TRUNC)
   2. if v[4] empty, then t[4] empty
 *)
 Lemma P_out_code_step_spec M1 q1 i j n t v:
   in_code j (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) ->
-  vec_pos v Fin4 = [] ->
   sss_step (bsm_sss (n:=5)) (i, FULL_PROG q1 i) (j, v) (n, t) ->
-  @in_code_or_exact_end n M1 q1 (i + 1) /\ vec_pos t Fin4 = [].
+  @in_code_or_exact_end n M1 q1 (i + 1).
 Proof.
-  intros H H0 H1.
-  split. 
-  - assert (H2 := @in_code_step_spec i j n t v 
-    (bsm_addstacks 1 (P M1 q1 (i + 1))) (TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|))) INV_TRUNC_PROG).
-    rewrite INV_TRUNC_PROG_length in H2.
-    assert (H3 := P_JMP_spec q1 i).
-    unfold in_code_or_exact_end in H3.
-    now apply (H2 H H3 H1).
-  - assert (H2 := @Step_empty_spec i j n t v 
-    (bsm_addstacks 1 (P M1 q1 (i + 1))) (TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|))) INV_TRUNC_PROG Fin4).
-    rewrite INV_TRUNC_PROG_length in H2.
-    now apply (H2 H H0 ((P_EMPTY_STACK_spec q1 i)) H1).
+  intros H H1.
+  assert (H2 := @in_code_step_spec i j n t v 
+  (bsm_addstacks 1 (P M1 q1 (i + 1))) (TRUNC_PROG (i + 1 + (|P M1 q1 (i + 1)|))) INV_TRUNC_PROG).
+  rewrite INV_TRUNC_PROG_length in H2.
+  assert (H3 := P_JMP_spec q1 i).
+  unfold in_code_or_exact_end in H3.
+  now apply (H2 H H3 H1).
 Qed.
   
 (* If (j,v) lies withing the P subprogram and if we can go from (j, v) to output (out1, out2),
@@ -1296,14 +1239,13 @@ Qed.
 *)
 Lemma P_out_code_spec M1 q1 i j v out1 out2 : 
   (i, FULL_PROG q1 i) //(j, v) ~~> (out1, out2) ->
-  vec_pos v Fin4 = [] ->
   in_code (fst (j, v)) (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) ->
     exists j' v',(i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) // (j, v) ->> (j', v') /\ 
     code_end (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) <= j'.
 Proof.
-  intros [[k H] H1] Q H0.
-  revert out1 out2 v i j H Q H1 H0.
-  induction k as [|k IHk]; intros out1 out2 v i j H Q H1 H0.
+  intros [[k H] H1] H0.
+  revert out1 out2 v i j H H1 H0.
+  induction k as [|k IHk]; intros out1 out2 v i j H H1 H0.
   - apply sss_steps_0_inv in H. injection H. intros H2 H3.
     cbn in H0. rewrite <- H3 in H1.
     destruct H1 as [H1 | H1].
@@ -1315,10 +1257,10 @@ Proof.
       lia.
   - apply sss_steps_S_inv' in H.
     destruct H as [[n t] [H' H'']].
-    destruct (P_out_code_step_spec H0 Q H') as [E E1].
+    assert (E := P_out_code_step_spec H0 H').
     assert (I : (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1))) <sc (i, FULL_PROG q1 i)) by (unfold FULL_PROG; auto).
     destruct E as [E | E].
-    + specialize (IHk out1 out2 t i n H'' E1 H1 E).
+    + specialize (IHk out1 out2 t i n H'' H1 E).
       destruct IHk as [j' [v' [[k' IHk1] IHk2]]].
       exists j', v'.
       split; [|apply IHk2].
@@ -1409,7 +1351,7 @@ Proof.
     (* i + 1 is in code of core program P*)
     assert (IN_CODE : in_code (fst (i + 1,  vec_app [|[]|](SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)))) (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1)))); [simpl; rewrite (bsm_length 1); lia|].
     (* REMOVE TRUNCATION *)
-    destruct (P_out_code_spec (conj INV H2) eq_refl IN_CODE) as [j' [v' [[k INV1] INV2]]].
+    destruct (P_out_code_spec (conj INV H2) IN_CODE) as [j' [v' [[k INV1] INV2]]].
     unfold code_end, fst, snd in INV2.
     clear INV H1 IN_CODE H2.
     (* REMOVE ADD STACKS*)

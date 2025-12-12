@@ -502,7 +502,7 @@ Proof.
   - destruct st2. econstructor.  1: eapply BSM_addstacks_step'.  1: exact H1. eapply IHk, H2.
 Qed.
 
-(* Use sss_compute instead of sss_steps*)
+(* Use sss_compute instead of sss_steps *)
 Lemma BSM_addstacks'' n i (P : list (bsm_instr n)) m j v o v' v'' :
   sss_compute (bsm_sss (n := n)) (i, P) (j, v) (o, v') -> sss_compute (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) (o, vec_app v'' v').
 Proof.
@@ -523,6 +523,29 @@ Proof.
     repeat eexists. econstructor.  1: eauto. eauto.
 Qed.
 
+(* use sss_compute instead of sss_steps *)
+Lemma BSM_addstacks_bwd'' n i (P : list (bsm_instr n)) m j v v'' out :
+  sss_compute (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_compute (bsm_sss (n := n)) (i, P) (j, v) (o, v').
+Proof.
+  intros [k H].
+  revert j v v'' out H.
+  induction k; intros j v v'' out H.
+  - apply sss_steps_0_inv in H.
+    eexists _ ,_.
+    split; [now rewrite H |].
+    exists 0. now apply sss_steps_0.
+  - apply sss_steps_S_inv' in H.
+    destruct H as [st2 [H1 H2]].
+    destruct (BSM_addstacks_step_bwd' H1) as [o [v' [H3 H4]]].
+    rewrite H3 in H1, H2.
+    destruct (IHk _ _ _ _ H2) as [o' [v''' [IHk1 [k' IHk2]]]].
+    eexists _, _.
+    split; [apply IHk1 |].
+    exists (S k').
+    apply (in_sss_steps_S H4 IHk2).
+Qed.
+
+
 Lemma BSM_addstacks n i (P : list (bsm_instr n)) m :
    {P' | length P = length P' /\ (forall j v o v', BSM.eval n (i, P) (j, v) (o, v') -> forall v'', BSM.eval (m + n) (i, P') (j, Vector.append v'' v) (o, Vector.append v'' v'))
           /\ forall v v'' j out, BSM.eval (m + n) (i, P') (j, Vector.append v'' v) out -> exists out, BSM.eval n (i, P) (j, v) out}.
@@ -538,6 +561,8 @@ Proof.
     eexists (_, _). eapply eval_iff. split.  1: eexists.  1: eapply H0.
     cbn in *. unfold bsm_addstacks in H2. rewrite length_map in H2. exact H2.
 Qed.
+
+
 
 (* Lifting a program does not change length *)
 Lemma bsm_length m n (P : list (bsm_instr n)):
@@ -1351,11 +1376,11 @@ Proof.
     (* i + 1 is in code of core program P*)
     assert (IN_CODE : in_code (fst (i + 1,  vec_app [|[]|](SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)))) (i + 1, bsm_addstacks 1 (P M1 q1 (i + 1)))); [simpl; rewrite (bsm_length 1); lia|].
     (* REMOVE TRUNCATION *)
-    destruct (P_out_code_spec (conj INV H2) IN_CODE) as [j' [v' [[k INV1] INV2]]].
+    destruct (P_out_code_spec (conj INV H2) IN_CODE) as [j' [v' [INV1 INV2]]].
     unfold code_end, fst, snd in INV2.
     clear INV H1 IN_CODE H2.
     (* REMOVE ADD STACKS*)
-    destruct (@BSM_addstacks_bwd' 4 (i + 1) (P M1 q1 (i + 1)) 1 k (i + 1) (SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)) [|[]|] (j',v') INV1) as [o [v'' [BWD1 BWD2]]]. clear INV1.
+    destruct (@BSM_addstacks_bwd'' 4 (i + 1) (P M1 q1 (i + 1)) 1 (i + 1) (SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)) [|[]|] (j',v') INV1) as [o [v'' [BWD1 BWD2]]]. clear INV1.
     injection BWD1. intros BWD1A BWD1B. clear BWD1.
     (* INV SIM*)
     unfold code_end, fst, snd in INV2.
@@ -1365,7 +1390,8 @@ Proof.
     rewrite LE in BWD1B.
     rewrite <- BWD1B in BWD2.
     rewrite <- Nat.add_assoc in BWD2.
-    apply (SBTM_HALT_to_HaltBSM.inverse_simulation' M1 q1 (i + 1) (complete_encode t) k ((| P M1 q1 (i + 1)|) + m) v'' BWD2).
+    apply (SBTM_HALT_to_HaltBSM.inverse_simulation' M1 q1 (i + 1) (complete_encode t) ((| P M1 q1 (i + 1)|) + m) v'').
+    split; [apply BWD2 |].
     right. simpl. lia.
 Qed.
 

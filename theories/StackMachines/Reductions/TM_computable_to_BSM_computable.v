@@ -494,37 +494,24 @@ Proof.
   - destruct P; cbn in *; inv H4. now rewrite IHx0.
 Qed.
 
-Lemma BSM_addstacks' n i (P : list (bsm_instr n)) m k j v o v' v'' :
-  sss_steps (bsm_sss (n := n)) (i, P) k (j, v) (o, v') -> sss_steps (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) k (j, vec_app v'' v) (o, vec_app v'' v').
-Proof.
-  induction k in j, v, o, v' |- *; inversion 1; subst.
-  - econstructor.
-  - destruct st2. econstructor.  1: eapply BSM_addstacks_step'.  1: exact H1. eapply IHk, H2.
-Qed.
-
 (* Use sss_compute instead of sss_steps *)
-Lemma BSM_addstacks'' n i (P : list (bsm_instr n)) m j v o v' v'' :
+Lemma BSM_addstacks' n i (P : list (bsm_instr n)) m j v o v' v'' :
   sss_compute (bsm_sss (n := n)) (i, P) (j, v) (o, v') -> sss_compute (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) (o, vec_app v'' v').
 Proof.
   intros H.
   destruct H as [k H].
-  exists k.
-  apply BSM_addstacks'.
-  apply H.
+  revert j v v' v'' o H.
+  induction k; intros j v v' v'' o H.
+  - exists 0. apply sss_steps_0_inv in H. injection H. intros. subst. clear H.
+    now apply sss_steps_0.
+  - apply sss_steps_S_inv' in H.
+    destruct H as [[s1 s2] [H1 H2]].
+    destruct (IHk _ _ _ v'' _ H2) as [k' IHk'].
+    exists (S k').
+    eapply in_sss_steps_S; [apply (BSM_addstacks_step' v'' H1) | apply IHk'].
 Qed.
 
-Lemma BSM_addstacks_bwd' n i (P : list (bsm_instr n)) m k j v v'' out :
-  sss_steps (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) k (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_steps (bsm_sss (n := n)) (i, P) k (j, v) (o, v').
-Proof.
-  induction k in j, v, out |- *; inversion 1; subst.
-  - repeat econstructor.
-  - eapply BSM_addstacks_step_bwd' in H1 as (? & ? & ? & ?). subst.
-    eapply IHk in H2 as (? & ? & ? & ?). subst.
-    repeat eexists. econstructor.  1: eauto. eauto.
-Qed.
-
-(* use sss_compute instead of sss_steps *)
-Lemma BSM_addstacks_bwd'' n i (P : list (bsm_instr n)) m j v v'' out :
+Lemma BSM_addstacks_bwd' n i (P : list (bsm_instr n)) m j v v'' out :
   sss_compute (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_compute (bsm_sss (n := n)) (i, P) (j, v) (o, v').
 Proof.
   intros [k H].
@@ -553,12 +540,12 @@ Proof.
   exists (bsm_addstacks m P). split. { unfold bsm_addstacks. now rewrite length_map. }
   setoid_rewrite eval_iff.
   split.
-  - intros j v o v' [[steps H1] H2] v''. split. 2:{ cbn. unfold bsm_addstacks. rewrite length_map. exact H2. }
-    exists steps. rewrite <- !vec_app_spec. now eapply BSM_addstacks'.
-  - intros v v'' j [o1 o2] H. eapply eval_iff in H as [[steps H1] H2].
+  - intros j v o v' [H1 H2] v''. split. 2:{ cbn. unfold bsm_addstacks. rewrite length_map. exact H2. }
+    rewrite <- !vec_app_spec. now eapply BSM_addstacks'.
+  - intros v v'' j [o1 o2] H. eapply eval_iff in H as [H1 H2].
     rewrite <- vec_app_spec in H1.
     eapply BSM_addstacks_bwd' in H1 as (? & ? & ? & ?). inv H.
-    eexists (_, _). eapply eval_iff. split.  1: eexists.  1: eapply H0.
+    eexists (_, _). eapply eval_iff. split; [apply H0 |].
     cbn in *. unfold bsm_addstacks in H2. rewrite length_map in H2. exact H2.
 Qed.
 
@@ -1329,7 +1316,7 @@ Proof.
       unfold FULL_PROG, INV_TRUNC_PROG.
       apply sc_spec; [cbn; lia| now replace (i - i) with 0 by lia].
     + (* P AND ADDSTACKS*)
-      eapply subcode_sss_compute; [| now apply (BSM_addstacks'' [|[]|] (SBTM_HALT_to_HaltBSM.simulation_output' _ _ _ _ _ _ _ Hf1A Hf1B))].
+      eapply subcode_sss_compute; [| now apply (BSM_addstacks' [|[]|] (SBTM_HALT_to_HaltBSM.simulation_output' _ _ _ _ _ _ _ Hf1A Hf1B))].
       eexists (INV_TRUNC_PROG), _.
       split; [now reflexivity| cbn; lia].
     + (* TRUNC*)
@@ -1380,7 +1367,7 @@ Proof.
     unfold code_end, fst, snd in INV2.
     clear INV H1 IN_CODE H2.
     (* REMOVE ADD STACKS*)
-    destruct (@BSM_addstacks_bwd'' 4 (i + 1) (P M1 q1 (i + 1)) 1 (i + 1) (SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)) [|[]|] (j',v') INV1) as [o [v'' [BWD1 BWD2]]]. clear INV1.
+    destruct (@BSM_addstacks_bwd' 4 (i + 1) (P M1 q1 (i + 1)) 1 (i + 1) (SBTM_HALT_to_HaltBSM.encode_tape (complete_encode t)) [|[]|] (j',v') INV1) as [o [v'' [BWD1 BWD2]]]. clear INV1.
     injection BWD1. intros BWD1A BWD1B. clear BWD1.
     (* INV SIM*)
     unfold code_end, fst, snd in INV2.

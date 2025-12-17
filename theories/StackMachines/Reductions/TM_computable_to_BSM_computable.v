@@ -501,7 +501,7 @@ Proof.
   intros H.
   destruct H as [k H].
   revert j v v' v'' o H.
-  induction k; intros j v v' v'' o H.
+  induction k as[| k IHk]; intros j v v' v'' o H.
   - exists 0. apply sss_steps_0_inv in H. injection H. intros. subst. clear H.
     now apply sss_steps_0.
   - apply sss_steps_S_inv' in H.
@@ -511,12 +511,13 @@ Proof.
     eapply in_sss_steps_S; [apply (BSM_addstacks_step' v'' H1) | apply IHk'].
 Qed.
 
+
 Lemma BSM_addstacks_bwd' n i (P : list (bsm_instr n)) m j v v'' out :
   sss_compute (bsm_sss (n := m + n)) (i, (@bsm_addstacks n m P)) (j, vec_app v'' v) out -> exists o v', out = (o, vec_app v'' v') /\ sss_compute (bsm_sss (n := n)) (i, P) (j, v) (o, v').
 Proof.
   intros [k H].
   revert j v v'' out H.
-  induction k; intros j v v'' out H.
+  induction k as [|k IHk]; intros j v v'' out H.
   - apply sss_steps_0_inv in H.
     eexists _ ,_.
     split; [now rewrite H |].
@@ -548,7 +549,6 @@ Proof.
     eexists (_, _). eapply eval_iff. split; [apply H0 |].
     cbn in *. unfold bsm_addstacks in H2. rewrite length_map in H2. exact H2.
 Qed.
-
 
 
 (* Lifting a program does not change length *)
@@ -1751,7 +1751,7 @@ Lemma flat_map_encode_symbol_inj v1 v2 :
   flat_map encode_symbol v1 = flat_map encode_symbol v2 -> v1 = v2.
 Proof.
   revert v2.
-  induction v1 as [| a l1]; intros v2 H; destruct v2 as [| b l2]; [easy| inversion H | inversion H|]; destruct a,b; [|inversion H|inversion H|];
+  induction v1 as [| a l1 IHl1]; intros v2 H; destruct v2 as [| b l2]; [easy| inversion H | inversion H|]; destruct a,b; [|inversion H|inversion H|];
   f_equal; apply IHl1; cbn in H; injection H; easy.
 Qed.
   

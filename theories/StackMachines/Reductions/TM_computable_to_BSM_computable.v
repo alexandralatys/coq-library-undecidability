@@ -646,9 +646,11 @@ Lemma encode_bsm_nil (Σ : finType) n   :
 Proof.
   eexists (flat_map encode_symbol (encode_sym _ ++ true :: false :: encode_sym _ ++ true :: false :: encode_sym _), _). intros t.
   cbn.
+  set (s := encode_sym _).
+  set (f := map _).
   rewrite !truncate_irrel.
   rewrite !flat_map_app.
-  rewrite skipn_app'; [|now rewrite encode_length, length_encode_sym]. 
+  rewrite skipn_app'; [|subst s; now rewrite encode_length, length_encode_sym]. 
   rewrite <- !flat_map_app. 
   f_equal.
   assert ( Hreorder : forall l1 l2 l3 l4,
@@ -658,28 +660,40 @@ Proof.
   apply Hreorder.
 Qed.
 
-(* Function definitions to improve performance*)
-Definition encoding_func' (Σ : finType)  x :=
+Definition strpush_common_short (Σ : finType) (s b : Σ) :=
+flat_map encode_symbol(
+encode_sym
   (projT1
      (projT2
         (FinTypes.finite_n
            (finType_CS (boundary + sigList (EncodeTapes.sigTape Σ)))))
-     x).
-
-Definition encoding_func (Σ : finType) x :=
-encode_sym (@encoding_func' Σ x).
-
-Definition strpush_common_short (Σ : finType) (s b : Σ) :=
-flat_map encode_symbol ((@encoding_func Σ (inl START)) ++
+     (inl START)) ++
 true
 :: false
-   :: @encoding_func Σ (inr sigList_cons) ++
+   :: encode_sym
+        (projT1
+           (projT2
+              (FinTypes.finite_n
+                 (finType_CS (boundary + sigList (EncodeTapes.sigTape Σ)))))
+           (inr sigList_cons)) ++
       true
       :: false
-         :: @encoding_func Σ (inr (sigList_X (EncodeTapes.LeftBlank false))) ++
+         :: encode_sym
+              (projT1
+                 (projT2
+                    (FinTypes.finite_n
+                       (finType_CS
+                          (boundary + sigList (EncodeTapes.sigTape Σ)))))
+                 (inr (sigList_X (EncodeTapes.LeftBlank false)))) ++
             true
             :: false
-               :: @encoding_func Σ (inr (sigList_X (EncodeTapes.MarkedSymbol b)))).
+               :: encode_sym
+                    (projT1
+                       (projT2
+                          (FinTypes.finite_n
+                             (finType_CS
+                                (boundary + sigList (EncodeTapes.sigTape Σ)))))
+                       (inr (sigList_X (EncodeTapes.MarkedSymbol b))))).
 
 
 Definition strpush_common (Σ : finType) (s b : Σ) :=
@@ -691,8 +705,15 @@ strpush_common_short s b ++
 
 Definition strpush_zero (Σ : finType) (s b : Σ) :=
   strpush_common s b ++
-        flat_map encode_symbol (
-                     @encoding_func Σ (inr (sigList_X (EncodeTapes.RightBlank false)))).
+  flat_map encode_symbol(
+                      encode_sym
+                          (projT1
+                             (projT2
+                                (FinTypes.finite_n
+                                   (finType_CS
+                                      (boundary +
+                                       sigList (EncodeTapes.sigTape Σ)))))
+                             (inr (sigList_X (EncodeTapes.RightBlank false))))).
 
 
 Lemma encode_bsm_at0 (Σ : finType) n (t : Vector.t (tape Σ) n) :
@@ -729,8 +750,15 @@ Qed.
 
 Definition strpush_succ (Σ : finType) (s b : Σ) :=
 strpush_common s b ++
-        flat_map encode_symbol (
-                    encoding_func (inr (sigList_X (EncodeTapes.UnmarkedSymbol s)))).
+flat_map encode_symbol (
+                     encode_sym
+                          (projT1
+                             (projT2
+                                (FinTypes.finite_n
+                                   (finType_CS
+                                      (boundary +
+                                       sigList (EncodeTapes.sigTape Σ)))))
+                             (inr (sigList_X (EncodeTapes.UnmarkedSymbol s))))).
 
 Lemma encode_tapes_cons {sig n} t (ts : tapes sig n) : encode_tapes (t ::: ts) = sigList_cons :: map sigList_X (encode_tape t) ++ encode_tapes ts.
 Proof. reflexivity. Qed.
@@ -742,9 +770,6 @@ Proof.
   rewrite <- !vec_pos_spec.
   rewrite !vec_pos_app_right.
   cbn.
-  set (X := map _). set (Y := encode_sym _).
-  replace X with (map (@encoding_func' Σ)) by reflexivity.
-  replace Y with (encode_sym (@encoding_func' Σ (inl START))) by reflexivity.
   rewrite (encode_tapes_cons (encNatTM s b m)). cbn.
   assert (Happ_assoc : forall l1 l2 l3 l4 l5,
     l1 ++ true :: false :: l2 ++ true :: false :: l3 ++ true :: false :: l4 ++ true :: l5 =
@@ -767,7 +792,6 @@ Proof.
     unfold strpush_common_short.
     rewrite flat_map_app.
     rewrite length_app.
-    unfold encoding_func.
     rewrite encode_length.
     now rewrite length_encode_sym.
 Qed.
@@ -1755,7 +1779,6 @@ Proof.
   f_equal; apply IHl1; cbn in H; injection H; easy.
 Qed.
   
-Transparent encoding_func.
 
 Lemma POSTP_spec' k n (Σ : finType) s b i :
   { POSTP | forall v : Vector.t _ k, forall t : Vector.t (tape Σ) (k + n), forall m m', exists out,
@@ -1763,21 +1786,20 @@ Lemma POSTP_spec' k n (Σ : finType) s b i :
                  (i + length POSTP, Vector.append (repeat true (m + m') ## v) (out ))
   }.
 Proof.
-  pose (THESYM := flat_map encode_symbol (encoding_func ((inr (sigList_X (EncodeTapes.UnmarkedSymbol s)))))).
+    pose (THESYM := flat_map encode_symbol (encode_sym
+  (projT1
+     (projT2
+        (FinTypes.finite_n
+           (finType_CS
+              (boundary +
+               sigList (EncodeTapes.sigTape Σ)))))
+     (inr (sigList_X (EncodeTapes.UnmarkedSymbol s)))))).
   exists (
       pop_exactly (pos_right (1 + k) Fin3) (pos_right (1 + k) Fin4) (i + 6 + 2 * length THESYM) THESYM i
       ++  PUSH (pos_left 5 Fin0) true
       ::  pop_many (pos_right (1 + k) Fin3) 4 (i + 1 + 2 * length THESYM)
       ++  POP (pos_right (1 + k) Fin0) i i :: nil).
 
-  assert (ENC : forall v, | flat_map encode_symbol v | = 2 * (|v|)). {
-    induction v as [| a l]; [cbn; lia|].
-    cbn.
-    cbn in IHl. rewrite IHl.
-    unfold "*".
-    rewrite !Nat.add_0_r, <- Nat.add_succ_r, <- Nat.add_succ_l.
-    reflexivity.
-  }
   intros.
   induction m in i, m' |- *.
   - pose proof (encode_bsm_zero s b) as [n' Hn'].
@@ -1793,9 +1815,8 @@ Proof.
     intros (l' & Hneq).
     unfold THESYM in Hneq. eapply utils_list.list_app_inj in Hneq as [].
     2: 
-    unfold encoding_func; 
-    repeat rewrite ENC; now rewrite !length_encode_sym.
-    unfold encoding_func, encoding_func' in H.
+
+    repeat rewrite encode_length; now rewrite !length_encode_sym.
     eapply flat_map_encode_symbol_inj in H.
     eapply encode_sym_inj in H.
     clear - H. destruct FinTypes.finite_n as [? [f H']]; cbn in *.
